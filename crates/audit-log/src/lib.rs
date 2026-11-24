@@ -353,8 +353,9 @@ impl AuditLog {
     }
 
     /// List events, newest first (or oldest first when `after_id` is set for streaming).
-    pub fn list(&self, q: &EventQuery) -> Result<Vec<EventRow>> {
-        let mut sql = String::from("SELECT id, record_json, prev_hash, hash FROM events WHERE 1=1");
+    /// WHERE clause (starting with " WHERE 1=1") and arguments for an [`EventQuery`].
+    fn where_clause(q: &EventQuery) -> (String, Vec<rusqlite::types::Value>) {
+        let mut sql = String::from(" WHERE 1=1");
         let mut args: Vec<rusqlite::types::Value> = Vec::new();
         let mut push = |cond: &str, v: rusqlite::types::Value, sql: &mut String| {
             sql.push_str(" AND ");
@@ -425,6 +426,23 @@ impl AuditLog {
         if q.mcp_only {
             sql.push_str(" AND action_type = 'mcp.call'");
         }
+        (sql, args)
+    }
+
+    /// Number of events matching `q` (ignores limit / pagination ordering).
+    pub fn count_matching(&self, q: &EventQuery) -> Result<u64> {
+        let (w, args) = Self::where_clause(q);
+        let n: i64 = self.conn.query_row(
+            &format!("SELECT count(*) FROM events{w}"),
+            params_from_iter(args.iter()),
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
+    pub fn list(&self, q: &EventQuery) -> Result<Vec<EventRow>> {
+        let (w, args) = Self::where_clause(q);
+        let mut sql = format!("SELECT id, record_json, prev_hash, hash FROM events{w}");
         let ascending = q.after_id.is_some();
         sql.push_str(if ascending {
             " ORDER BY id ASC"
@@ -601,13 +619,32 @@ impl AuditLog {
         Ok(s)
     }
 
+    /// One session by id (any age).
+    pub fn session(&self, session_id: &str) -> Result<Option<SessionSummary>> {
+        Ok(self
+            .session_rows("WHERE session_id = ?1", rusqlite::params![session_id], 1)?
+            .into_iter()
+            .next())
+    }
+
     pub fn sessions(&self, limit: u32) -> Result<Vec<SessionSummary>> {
-        let mut st = self.conn.prepare(
+        self.session_rows("WHERE session_id IS NOT NULL", rusqlite::params![], limit)
+    }
+
+    fn session_rows(
+        &self,
+        filter: &str,
+        p: &[&dyn rusqlite::ToSql],
+        limit: u32,
+    ) -> Result<Vec<SessionSummary>> {
+        let sql = format!(
             "SELECT session_id, max(agent), max(workspace), min(ts_utc), max(ts_utc), count(*), max(risk_score),
                     sum(phase='pre' AND simulated_decision IN ('deny','require_sandbox')), sum(actual_decision='deny'), sum(action_type='session.end')
-             FROM events WHERE session_id IS NOT NULL GROUP BY session_id ORDER BY max(ts_utc) DESC LIMIT ?1",
-        )?;
-        let rows = st.query_map([limit.clamp(1, 1000)], |r| {
+             FROM events {filter} GROUP BY session_id ORDER BY max(ts_utc) DESC LIMIT {}",
+            limit.clamp(1, 1000)
+        );
+        let mut st = self.conn.prepare(&sql)?;
+        let rows = st.query_map(p, |r| {
             Ok(SessionSummary {
                 session_id: r.get(0)?,
                 agent: r.get(1)?,

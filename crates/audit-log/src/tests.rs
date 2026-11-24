@@ -199,6 +199,32 @@ fn stats_and_sessions() {
     assert_eq!(s.would_block, 2);
     assert_eq!(s.by_category[0].key, "secret_access");
     assert!(!s.per_minute.is_empty());
+    assert_eq!(
+        db.count_matching(&EventQuery {
+            min_score: Some(40),
+            ..Default::default()
+        })
+        .unwrap(),
+        6
+    );
+    assert_eq!(
+        db.count_matching(&EventQuery {
+            session_id: Some("a".into()),
+            ..Default::default()
+        })
+        .unwrap(),
+        5
+    );
+    assert_eq!(
+        db.count_matching(&EventQuery {
+            search: Some("%".into()),
+            ..Default::default()
+        })
+        .unwrap(),
+        0
+    );
+    assert_eq!(db.session("b").unwrap().unwrap().events, 5);
+    assert!(db.session("nope").unwrap().is_none());
     let sess = db.sessions(10).unwrap();
     assert_eq!(sess.len(), 2);
     assert_eq!(

@@ -466,8 +466,11 @@ export default function SessionsPage() {
     if (!q) return list;
     return list.filter((s) => `${s.workspace ?? ""} ${s.session_id} ${s.agent}`.toLowerCase().includes(q));
   }, [list, filter]);
+  // Deep links to sessions older than the loaded list are resolved individually.
+  const inList = paramId ? list.find((s) => s.session_id === paramId) ?? null : null;
+  const remote = useAsync(() => (paramId && !inList && sessions.data ? backend.getSession(paramId) : Promise.resolve(null)), [paramId, !!inList, !!sessions.data]);
   // Without an explicit selection the most recent session is shown.
-  const selected = (paramId ? list.find((s) => s.session_id === paramId) : list[0]) ?? null;
+  const selected = (paramId ? inList ?? remote.data ?? null : list[0]) ?? null;
 
   return (
     <Page fill>

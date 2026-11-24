@@ -45,6 +45,8 @@ pub fn run() {
             commands::list_events,
             commands::get_event,
             commands::get_stats,
+            commands::count_events,
+            commands::get_session,
             commands::list_sessions,
             commands::list_incidents,
             commands::set_mode,

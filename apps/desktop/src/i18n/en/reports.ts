@@ -37,7 +37,7 @@ export const reports = {
   includedCount: "events match these filters",
   includedCounting: "Counting matching events…",
   includedCountFailed: "The number of matching events could not be determined.",
-  includedMany: "5000+",
+  includedMany: "{count} (export includes the newest {cap})",
   includedFields: "Fields per event",
   includedRedaction: "Redaction",
   redaction1: "All content is exported exactly as stored: already redacted by the daemon.",

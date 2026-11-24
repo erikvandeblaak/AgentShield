@@ -79,6 +79,17 @@ checkpoint and `VACUUM` so the content is physically removed. Deleting audit eve
 action the **user** performs; an agent attempting it is blocked by Claude Code's own safety classifier
 (observed) and flagged by AgentShield's tamper detections.
 
+## SF-013 — Here-document bodies were parsed as commands (fixed)
+Found in real use: `python - <<'X' … X` scripts mentioning `chpasswd` were scored as an account change
+(75 → ask) and paths in Python strings as writes outside the workspace. The lexer now captures
+here-document bodies (`<<`, `<<-`, quoted/unquoted delimiters, several per line) and hands them to the
+receiving command: shells → parsed as commands, interpreters → inline code, SQL clients → argument for
+the database detectors (so `psql <<SQL … DROP TABLE …` is now *detected*), anything else → data.
+
+## SF-014 — Outage handled as designed (observed in real use)
+The real daemon was stopped unexpectedly during development; hooks fell back to local evaluation (3 events,
+coverage `degraded`, 0 dropped), the hash chain stayed intact, and the daemon was restarted.
+
 ## Open questions
 - Q-001: Own approval UI with scoped, expiring tokens in Interactive Mode? Currently delegated to the
   native prompt (ADR-0005) because it is the only surface that reliably pauses the agent.

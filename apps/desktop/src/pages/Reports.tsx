@@ -189,9 +189,10 @@ function ExportCard() {
     return q;
   }, [filters]);
 
-  const preview = useAsync(() => backend.listEvents({ ...query, limit: PREVIEW_LIMIT }).then((rows) => rows.length), [query]);
+  // Exact count from the backend; exports themselves are capped at PREVIEW_LIMIT rows.
+  const preview = useAsync(() => backend.countEvents(query), [query]);
   const count = preview.refreshing ? null : preview.data;
-  const countLabel = count == null ? null : count >= PREVIEW_LIMIT ? r.includedMany : formatNumber(count, locale);
+  const countLabel = count == null ? null : count > PREVIEW_LIMIT ? fmt(r.includedMany, { count: formatNumber(count, locale), cap: formatNumber(PREVIEW_LIMIT, locale) }) : formatNumber(count, locale);
 
   const categoryOptions = useMemo<Option<RiskCategory | "">[]>(() => [
     { value: "", label: r.categoryAny },

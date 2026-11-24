@@ -12,5 +12,5 @@
 | TD-008 | Linux desktop app not visually verified on a real Mint desktop | .deb + AppImage build in WSL Ubuntu 24.04; app starts and runs stable under WSLg (software rendering) | Install the .deb on Mint 22 and check the UI; Debian package name is derived from the product name (`erik-s-agent-shield`) |
 | TD-009 | No OpenTelemetry export | Privacy-first; must be opt-in | OTLP exporter for redacted events |
 | TD-010 | Local AI Risk Advisor (Ollama) not implemented | Spec: later phase, optional | Opt-in summaries over redacted events |
-| TD-011 | Frontend asks for a few extra endpoints (count, get_session, per-preset policy view) | Not required for MVP | Add `count_events`, `get_session`, `preset_info` IPC methods |
+| TD-011 | Per-preset policy view (rules of a non-active preset) | Not required for MVP; `count_events` and `get_session` are implemented | `preset_info` IPC method |
 | TD-012 | `freezePrototype` disabled | ECharts incompatibility (SF-005) | Re-evaluate when ECharts supports frozen prototypes |

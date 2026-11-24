@@ -320,6 +320,8 @@ export const demoApi: Api = {
   startDaemon: () => delay(status()),
   listEvents: (query) => delay(listEvents(query)),
   getEvent: (id) => delay(st().data.events.find((e) => e.record.id === id) ?? null),
+  countEvents: (query) => delay(listEvents({ ...query, limit: Number.MAX_SAFE_INTEGER }).length),
+  getSession: (sessionId) => delay(computeSessions(st().data.events, Number.MAX_SAFE_INTEGER).find((s) => s.session_id === sessionId) ?? null),
   stats: (windowHours) => delay(computeStats(st().data.events, windowHours, Date.now())),
   sessions: (limit) => delay(computeSessions(st().data.events, limit)),
   incidents: (limit) => delay(st().data.incidents.slice(0, limit)),

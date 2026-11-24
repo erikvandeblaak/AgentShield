@@ -626,6 +626,10 @@ impl Handler for Daemon {
             Method::GetEvent { id } => {
                 serde_json::to_value(self.db()?.get(id).map_err(hs)?).map_err(hs)
             }
+            Method::CountEvents { query } => Ok(json!(self.db()?.count_matching(&query).map_err(hs)?)),
+            Method::GetSession { session_id } => {
+                serde_json::to_value(self.db()?.session(&session_id).map_err(hs)?).map_err(hs)
+            }
             Method::Stats { window_hours } => {
                 serde_json::to_value(self.db()?.stats(window_hours).map_err(hs)?).map_err(hs)
             }

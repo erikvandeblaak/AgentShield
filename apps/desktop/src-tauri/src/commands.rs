@@ -121,6 +121,16 @@ pub fn get_event(s: State<AppState>, id: i64) -> R<Value> {
 }
 
 #[tauri::command]
+pub fn count_events(s: State<AppState>, query: EventQuery) -> R<Value> {
+    ipc(&s.paths, Method::CountEvents { query })
+}
+
+#[tauri::command]
+pub fn get_session(s: State<AppState>, session_id: String) -> R<Value> {
+    ipc(&s.paths, Method::GetSession { session_id })
+}
+
+#[tauri::command]
 pub fn get_stats(s: State<AppState>, window_hours: u32) -> R<Value> {
     ipc(&s.paths, Method::Stats { window_hours })
 }

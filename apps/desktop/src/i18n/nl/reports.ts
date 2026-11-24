@@ -39,7 +39,7 @@ export const reports: Dict["reports"] = {
   includedCount: "events voldoen aan deze filters",
   includedCounting: "Overeenkomende events tellen…",
   includedCountFailed: "Het aantal overeenkomende events kon niet worden bepaald.",
-  includedMany: "5000+",
+  includedMany: "{count} (export bevat de nieuwste {cap})",
   includedFields: "Velden per event",
   includedRedaction: "Redactie",
   redaction1: "Alle inhoud wordt geëxporteerd precies zoals opgeslagen: al geredigeerd door de daemon.",

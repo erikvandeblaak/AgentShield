@@ -50,6 +50,14 @@ pub enum Method {
     GetEvent {
         id: i64,
     },
+    /// Number of events matching a query (export previews, pagination).
+    CountEvents {
+        query: EventQuery,
+    },
+    /// One session summary by id, regardless of age.
+    GetSession {
+        session_id: String,
+    },
     Stats {
         window_hours: u32,
     },
