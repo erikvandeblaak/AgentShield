@@ -237,11 +237,32 @@ fn handler_methods() {
     let b = d.handle(Method::Backup, "t").unwrap();
     assert!(std::path::Path::new(b.as_str().unwrap()).is_file());
     let _ = d.handle(Method::McpServers, "t").unwrap();
-    let n = d.handle(Method::CountEvents { query: EventQuery::default() }, "t").unwrap();
+    let n = d
+        .handle(
+            Method::CountEvents {
+                query: EventQuery::default(),
+            },
+            "t",
+        )
+        .unwrap();
     assert!(n.as_u64().unwrap() >= 1);
-    let none = d.handle(Method::GetSession { session_id: "nope".into() }, "t").unwrap();
+    let none = d
+        .handle(
+            Method::GetSession {
+                session_id: "nope".into(),
+            },
+            "t",
+        )
+        .unwrap();
     assert!(none.is_null());
-    let some = d.handle(Method::GetSession { session_id: "abc123".into() }, "t").unwrap();
+    let some = d
+        .handle(
+            Method::GetSession {
+                session_id: "abc123".into(),
+            },
+            "t",
+        )
+        .unwrap();
     assert_eq!(some["session_id"], "abc123");
 }
 
