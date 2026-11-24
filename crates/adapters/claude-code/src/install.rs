@@ -160,6 +160,32 @@ fn read_settings(path: &Path) -> Result<Value, String> {
 /// arrays are removed only when *our* removal emptied them; the `hooks` object is removed
 /// only when our removal left it empty.
 pub fn strip(settings: &Value) -> (Value, usize) {
+    strip_for(settings, None)
+}
+
+/// Normalize a binary path for comparison (case, separators, quotes, `\\?\` prefix).
+pub fn same_binary(a: &str, b: &Path) -> bool {
+    let norm = |s: &str| {
+        s.trim()
+            .trim_matches('"')
+            .trim_start_matches(r"\\?\")
+            .replace('\\', "/")
+            .to_ascii_lowercase()
+    };
+    norm(a) == norm(&b.to_string_lossy())
+}
+
+/// Like [`strip`], but when `only` is given, removes only handlers that run that exact binary
+/// (so uninstalling one installation never touches another one).
+pub fn strip_for(settings: &Value, only: Option<&Path>) -> (Value, usize) {
+    let ours = |h: &Value| {
+        is_agentshield_handler(h)
+            && only.is_none_or(|b| {
+                h.get("command")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|c| same_binary(c, b))
+            })
+    };
     let mut out = settings.clone();
     let mut removed = 0;
     let mut hooks_emptied_by_us = false;
@@ -176,7 +202,7 @@ pub fn strip(settings: &Value) -> (Value, usize) {
                     return true;
                 };
                 let before = hs.len();
-                hs.retain(|h| !is_agentshield_handler(h));
+                hs.retain(|h| !ours(h));
                 let n = before - hs.len();
                 removed_here += n;
                 !(n > 0 && hs.is_empty())
@@ -440,9 +466,14 @@ pub fn install(path: &Path, binary: &Path, fail_closed: bool, backup_dir: &Path)
 
 /// Remove only AgentShield's handlers.
 pub fn uninstall(path: &Path, backup_dir: &Path) -> InstallResult {
+    uninstall_for(path, backup_dir, None)
+}
+
+/// Remove AgentShield's handlers; with `only`, just those running that binary.
+pub fn uninstall_for(path: &Path, backup_dir: &Path, only: Option<&Path>) -> InstallResult {
     let run = || -> Result<InstallResult, String> {
         let current = read_settings(path)?;
-        let (next, removed) = strip(&current);
+        let (next, removed) = strip_for(&current, only);
         if removed == 0 {
             return Ok(InstallResult {
                 ok: true,
@@ -456,12 +487,20 @@ pub fn uninstall(path: &Path, backup_dir: &Path) -> InstallResult {
         write(path, &next)?;
         let st = state(path);
         Ok(InstallResult {
-            ok: !st.installed,
+            ok: if only.is_some() {
+                strip_for(&read_settings(path)?, only).1 == 0
+            } else {
+                !st.installed
+            },
             message: format!(
                 "Removed {removed} AgentShield hook handler(s); other hooks and settings unchanged."
             ),
             backup_path: b.map(|p| p.display().to_string()),
-            verified: !st.installed,
+            verified: if only.is_some() {
+                strip_for(&read_settings(path)?, only).1 == 0
+            } else {
+                !st.installed
+            },
             problems: st.problems,
         })
     };

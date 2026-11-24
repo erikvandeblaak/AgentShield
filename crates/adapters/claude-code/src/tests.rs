@@ -421,3 +421,35 @@ fn config_change_is_recorded_as_lifecycle() {
     assert!(!ev.enforceable);
     assert_eq!(ev.input["source"], "user_settings");
 }
+
+#[test]
+fn uninstall_only_removes_hooks_of_one_binary() {
+    let dir = tempfile::tempdir().unwrap();
+    let settings = dir.path().join("settings.json");
+    let a = dir.path().join("a").join("agentshield.exe");
+    let b = dir.path().join("b").join("agentshield.exe");
+    for p in [&a, &b] {
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, b"x").unwrap();
+    }
+    assert!(install(&settings, &a, false, &dir.path().join("bk")).ok);
+    // A second installation's handler, added by hand (as another install would).
+    let mut v: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+    v["hooks"]["PreToolUse"].as_array_mut().unwrap().push(json!({"matcher": "*", "hooks": [{"type": "command", "command": b.to_string_lossy(), "args": ["hook"]}]}));
+    std::fs::write(&settings, v.to_string()).unwrap();
+    // Path comparison is case/separator-insensitive.
+    let a_variant = std::path::PathBuf::from(a.to_string_lossy().to_uppercase().replace('\\', "/"));
+    let r = uninstall_for(&settings, &dir.path().join("bk"), Some(&a_variant));
+    assert!(r.ok, "{r:?}");
+    let after: Value = serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+    let s = after.to_string();
+    assert!(
+        s.contains(&*b.to_string_lossy().replace('\\', "\\\\")),
+        "other installation untouched: {s}"
+    );
+    assert_eq!(
+        after["hooks"].as_object().unwrap().len(),
+        1,
+        "only the other install's PreToolUse remains"
+    );
+}

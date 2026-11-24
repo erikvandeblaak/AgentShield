@@ -147,6 +147,15 @@ pub fn wrap_value(
 
 /// Compute the unwrapped config (pure).
 pub fn unwrap_value(config: &Value, servers: &[String]) -> (Value, Vec<String>) {
+    unwrap_value_for(config, servers, None)
+}
+
+/// Like [`unwrap_value`], restricted to entries that run `only` (when given).
+pub fn unwrap_value_for(
+    config: &Value,
+    servers: &[String],
+    only: Option<&Path>,
+) -> (Value, Vec<String>) {
     let mut out = config.clone();
     let mut changed = Vec::new();
     if let Some(map) = out.get_mut("mcpServers").and_then(|m| m.as_object_mut()) {
@@ -159,6 +168,15 @@ pub fn unwrap_value(config: &Value, servers: &[String]) -> (Value, Vec<String>) 
             let Some(entry) = map.get_mut(&name) else {
                 continue;
             };
+            let runs_only = only.is_none_or(|b| {
+                entry
+                    .get("command")
+                    .and_then(|c| c.as_str())
+                    .is_some_and(|c| crate::install::same_binary(c, b))
+            });
+            if !runs_only {
+                continue;
+            }
             if let Some((cmd, args)) = original_command(entry) {
                 entry["command"] = json!(cmd);
                 if args.is_empty() {
@@ -223,9 +241,27 @@ pub fn wrap(
 }
 
 pub fn unwrap(path: &Path, servers: &[String], backup_dir: &Path) -> WrapResult {
+    unwrap_for(path, servers, backup_dir, None)
+}
+
+pub fn unwrap_for(
+    path: &Path,
+    servers: &[String],
+    backup_dir: &Path,
+    only: Option<&Path>,
+) -> WrapResult {
     let run = || -> Result<WrapResult, String> {
+        if !path.is_file() {
+            return Ok(WrapResult {
+                ok: true,
+                message: format!("{} does not exist; nothing to restore", path.display()),
+                changed: vec![],
+                skipped: vec![],
+                backup_path: None,
+            });
+        }
         let cur = load(path)?;
-        let (next, changed) = unwrap_value(&cur, servers);
+        let (next, changed) = unwrap_value_for(&cur, servers, only);
         if changed.is_empty() {
             return Ok(WrapResult {
                 ok: true,

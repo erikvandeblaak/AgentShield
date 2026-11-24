@@ -154,6 +154,9 @@ enum AgentCmd {
         agent: String,
         #[arg(long)]
         yes: bool,
+        /// Remove only hooks that run this agentshield binary (used by the uninstaller).
+        #[arg(long)]
+        only_this_binary: bool,
     },
 }
 
@@ -299,6 +302,9 @@ enum McpCmd {
         config: Option<std::path::PathBuf>,
         #[arg(long)]
         yes: bool,
+        /// Restore only servers routed through this agentshield binary (used by the uninstaller).
+        #[arg(long)]
+        only_this_binary: bool,
     },
     /// Accept a server's current tool definitions after reviewing a change.
     Trust {
@@ -468,6 +474,10 @@ fn dunce(p: std::path::PathBuf) -> std::path::PathBuf {
 }
 
 fn main() {
+    // Never let children (hook -> daemon) inherit our stdio: a long-lived daemon holding the
+    // caller's stdout pipe would make the caller (Claude Code, a script) wait forever.
+    #[cfg(windows)]
+    daemon_ctl::std_handles_not_inheritable();
     // The hook path must stay silent and fast: dispatch before anything else.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(|s| s.as_str()) == Some("hook") {
@@ -1362,6 +1372,7 @@ fn mcp_cmd(ctx: &Ctx, m: McpCmd) -> anyhow::Result<i32> {
             servers,
             config,
             yes,
+            only_this_binary,
         } => {
             let file = config.unwrap_or_else(claude_json);
             if !confirm(
@@ -1374,7 +1385,12 @@ fn mcp_cmd(ctx: &Ctx, m: McpCmd) -> anyhow::Result<i32> {
             ) {
                 return Ok(EXIT_ABORT);
             }
-            let r = claude::mcp_wrap::unwrap(&file, &servers, &ctx.paths.backups_dir());
+            let r = claude::mcp_wrap::unwrap_for(
+                &file,
+                &servers,
+                &ctx.paths.backups_dir(),
+                only_this_binary.then(hook_binary).as_deref(),
+            );
             ctx.out(&serde_json::to_value(&r)?, || {
                 format!("{} {}", if r.ok { "✔" } else { "✘" }, r.message)
             });
@@ -1505,7 +1521,11 @@ fn agent_cmd(ctx: &Ctx, a: AgentCmd) -> anyhow::Result<i32> {
             }
             Ok(if r.ok { 0 } else { EXIT_ERR })
         }
-        AgentCmd::Uninstall { agent, yes } => {
+        AgentCmd::Uninstall {
+            agent,
+            yes,
+            only_this_binary,
+        } => {
             check_agent(&agent)?;
             if !confirm(
                 ctx,
@@ -1517,7 +1537,8 @@ fn agent_cmd(ctx: &Ctx, a: AgentCmd) -> anyhow::Result<i32> {
             ) {
                 return Ok(EXIT_ABORT);
             }
-            let r = claude::install::uninstall(&sp, &backups);
+            let only = only_this_binary.then(hook_binary);
+            let r = claude::install::uninstall_for(&sp, &backups, only.as_deref());
             ctx.out(&serde_json::to_value(&r)?, || {
                 format!(
                     "{} {}",

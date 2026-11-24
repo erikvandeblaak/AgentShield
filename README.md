@@ -71,6 +71,16 @@ The installer adds AgentShield hooks to `~/.claude/settings.json` (exec form, no
 existing hook and permission, backs the file up first and verifies the result. `agentshield agent
 uninstall claude-code` removes only AgentShield's entries.
 
+### Uninstall
+
+- **Windows (NSIS setup.exe, recommended):** the uninstaller stops the daemon, removes exactly the hooks
+  and MCP wrappers of *that* installation (other tools' hooks and other AgentShield copies stay), restores
+  the original MCP commands and keeps your audit log. Upgrading over an existing install keeps monitoring on.
+- **MSI and Linux .deb/AppImage:** these package formats cannot safely edit a user's home directory.
+  Run `agentshield agent uninstall claude-code` and `agentshield mcp unwrap` first, then remove the package.
+  (A leftover hook makes Claude Code report a hook error; it does not block unless you chose `--fail-closed`.)
+- Your data (`%LOCALAPPDATA%\AgentShield` / `~/.local/share/agentshield`) is never deleted automatically.
+
 ## CLI
 
 ```

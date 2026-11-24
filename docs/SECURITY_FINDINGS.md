@@ -110,6 +110,20 @@ Found by running the test suite in parallel; temp directories are now unique per
 individually (verified TLS, retries). One advisory object is listed but not public (403); it is skipped
 and reported in the command output — never silently.
 
+## SF-019 — Uninstalling left hooks pointing at a removed binary (fixed)
+Found by the installer lifecycle test: after the NSIS uninstaller ran, all 11 Claude Code hooks still
+pointed at the deleted `agentshield.exe` (with `--fail-closed` that would block every tool call). The
+installer now has NSIS hooks: stop the daemon before (re)install/uninstall, and on uninstall remove only
+the hooks/MCP wrappers that run *this* binary (`--only-this-binary`; path comparison is case- and
+separator-insensitive). Skipped on upgrade. MSI/.deb cannot do this safely; documented in the README.
+Lifecycle test (install → wrap → reinstall over a running daemon → uninstall): 16/16.
+
+## SF-020 — Callers hung when selftest started the daemon (fixed)
+`agentshield selftest | …` never returned when the daemon was not yet running: the CLI's inheritable
+stdout handle was inherited by the hook child and from there by the long-lived daemon, keeping the
+caller's pipe open. Every CLI invocation now marks its standard handles non-inheritable at start-up
+(same documented `unsafe` exception as SF-004). The hook path already did this.
+
 ## Open questions
 - Q-001: Own approval UI with scoped, expiring tokens in Interactive Mode? Currently delegated to the
   native prompt (ADR-0005) because it is the only surface that reliably pauses the agent.

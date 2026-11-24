@@ -21,7 +21,7 @@ pub fn ping(paths: &Paths) -> bool {
 /// non-inheritable before spawning the long-lived daemon.
 #[cfg(windows)]
 #[allow(unsafe_code)]
-fn std_handles_not_inheritable() {
+pub fn std_handles_not_inheritable() {
     use windows_sys::Win32::Foundation::{
         HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation,
     };
