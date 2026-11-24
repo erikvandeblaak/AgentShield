@@ -1,0 +1,18 @@
+[package]
+name = "agentshield-reporting"
+description = "Redacted exports (JSON, CSV, SARIF, HTML) and local security reports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-audit-log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+
+[lints]
+workspace = true

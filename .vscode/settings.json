@@ -1,0 +1,95 @@
+{
+    // --- rust-analyzer ---------------------------------------------------------
+    // Two Cargo workspaces: the core (repo root) and the Tauri desktop backend.
+    "rust-analyzer.linkedProjects": [
+        "Cargo.toml",
+        "apps/desktop/src-tauri/Cargo.toml"
+    ],
+    // Clippy on save, same lints as the quality gate (workspace lints in Cargo.toml).
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.check.allTargets": true,
+    "rust-analyzer.check.workspace": true,
+    // Own target dir (target/rust-analyzer): no lock contention with cargo run/test.
+    "rust-analyzer.cargo.targetDir": true,
+    "rust-analyzer.procMacro.enable": true,
+    "rust-analyzer.imports.granularity.group": "module",
+    "rust-analyzer.completion.autoimport.enable": true,
+    "rust-analyzer.testExplorer": true,
+    "rust-analyzer.runnables.extraEnv": {
+        "RUST_BACKTRACE": "1",
+        // Tests and runnables never touch your real AgentShield profile or Claude settings.
+        "AGENTSHIELD_HOME": "${workspaceFolder}/target/dev/home",
+        "CLAUDE_CONFIG_DIR": "${workspaceFolder}/target/dev/claude"
+    },
+    "rust-analyzer.inlayHints.parameterHints.enable": true,
+    "rust-analyzer.inlayHints.typeHints.enable": true,
+    "rust-analyzer.inlayHints.chainingHints.enable": true,
+    "rust-analyzer.lens.enable": true,
+    "rust-analyzer.diagnostics.styleLints.enable": true,
+    // Unix code paths (#[cfg(unix)]) are checked by the task "clippy (Linux, WSL)";
+    // switch temporarily for full IDE support on them:
+    // "rust-analyzer.cargo.target": "x86_64-unknown-linux-gnu",
+
+    // --- TypeScript / React (apps/desktop) ------------------------------------
+    "typescript.tsdk": "apps/desktop/node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+    "eslint.workingDirectories": [{ "directory": "apps/desktop", "changeProcessCWD": true }],
+    "tailwindCSS.experimental.configFile": "apps/desktop/src/styles.css",
+    "[typescript]": { "editor.defaultFormatter": "vscode.typescript-language-features", "editor.formatOnSave": false },
+    "[typescriptreact]": { "editor.defaultFormatter": "vscode.typescript-language-features", "editor.formatOnSave": false },
+    "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
+
+    // --- Editor ----------------------------------------------------------------
+    "debug.allowBreakpointsEverywhere": true,
+    "editor.inlayHints.enabled": "onUnlessPressed",
+    "editor.bracketPairColorization.enabled": true,
+    "editor.guides.bracketPairs": "active",
+    "editor.stickyScroll.enabled": true,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true,
+        "editor.rulers": [100]
+    },
+    "[toml]": {
+        "editor.defaultFormatter": "tamasfe.even-better-toml",
+        "editor.formatOnSave": true
+    },
+    "[markdown]": { "files.trimTrailingWhitespace": false },
+    "evenBetterToml.formatter.reorderKeys": false,
+    "evenBetterToml.formatter.columnWidth": 100,
+
+    // --- Files: LF everywhere (.gitattributes: eol=lf) ---------------------------
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "files.associations": { "rustfmt.toml": "toml", "*.toml": "toml" },
+    "files.exclude": {
+        "**/target": true,
+        "**/node_modules": true,
+        "apps/desktop/dist": true,
+        "apps/desktop/src-tauri/gen": true
+    },
+    "files.watcherExclude": {
+        "**/target/**": true,
+        "**/dist/**": true,
+        "**/node_modules/**": true
+    },
+    "search.exclude": {
+        "**/target": true,
+        "**/dist": true,
+        "**/node_modules": true,
+        "**/Cargo.lock": true,
+        "**/package-lock.json": true
+    },
+    "explorer.fileNesting.enabled": true,
+    "explorer.fileNesting.patterns": {
+        "Cargo.toml": "Cargo.lock, rustfmt.toml, deny.toml",
+        "README.md": "README.nl.md, CLAUDE.md, CHANGELOG.md, SECURITY.md, LICENSE",
+        "package.json": "package-lock.json, tsconfig*.json, vite.config.ts, eslint.config.js"
+    },
+
+    // --- Integrated terminal -----------------------------------------------------
+    "terminal.integrated.env.windows": { "RUST_BACKTRACE": "1" },
+    "terminal.integrated.env.linux": { "RUST_BACKTRACE": "1" }
+}

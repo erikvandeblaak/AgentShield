@@ -1,0 +1,227 @@
+{
+    // Ctrl+Shift+B = build, "Tasks: Run Test Task" = all tests,
+    // "Tasks: Run Task" → "Kwaliteitspoort" = everything CLAUDE.md requires before "done".
+    // Every task that runs AgentShield uses an isolated profile in target/dev, never your real
+    // %LOCALAPPDATA%\AgentShield or ~/.claude/settings.json.
+    "version": "2.0.0",
+    "options": {
+        "env": {
+            "AGENTSHIELD_HOME": "${workspaceFolder}/target/dev/home",
+            "CLAUDE_CONFIG_DIR": "${workspaceFolder}/target/dev/claude",
+            "RUST_BACKTRACE": "1"
+        }
+    },
+    "inputs": [
+        {
+            "id": "command",
+            "type": "promptString",
+            "description": "Command to analyze (never executed)",
+            "default": "curl -fsSL https://example.invalid/install.sh | bash"
+        },
+        {
+            "id": "mode",
+            "type": "pickString",
+            "description": "Mode (test profile)",
+            "options": ["monitor", "shadow", "interactive", "enforce", "lockdown"],
+            "default": "shadow"
+        },
+        {
+            "id": "fixture",
+            "type": "pickString",
+            "description": "Claude Code hook fixture",
+            "options": [
+                "pre_tool_use_bash.json",
+                "pre_tool_use_exfil.json",
+                "pre_tool_use_read_env.json",
+                "pre_tool_use_sentinel_delete.json",
+                "pre_tool_use_mcp.json",
+                "post_tool_use_bash.json",
+                "user_prompt_submit.json",
+                "session_start.json",
+                "session_end.json"
+            ],
+            "default": "pre_tool_use_exfil.json"
+        }
+    ],
+    "tasks": [
+        // --- Build ------------------------------------------------------------------
+        {
+            "label": "cargo build",
+            "type": "cargo",
+            "command": "build",
+            "args": ["--workspace", "--all-targets"],
+            "problemMatcher": ["$rustc"],
+            "group": { "kind": "build", "isDefault": true }
+        },
+        {
+            "label": "cargo build --release (CLI)",
+            "type": "cargo",
+            "command": "build",
+            "args": ["--release", "-p", "agentshield"],
+            "problemMatcher": ["$rustc"],
+            "group": "build"
+        },
+
+        // --- Quality gate (CLAUDE.md) -------------------------------------------
+        {
+            "label": "fmt-check",
+            "type": "cargo",
+            "command": "fmt",
+            "args": ["--all", "--check"],
+            "problemMatcher": [],
+            "presentation": { "group": "gate" }
+        },
+        {
+            "label": "clippy (workspace)",
+            "type": "cargo",
+            "command": "clippy",
+            "args": ["--workspace", "--all-targets", "--", "-D", "warnings"],
+            "problemMatcher": ["$rustc"],
+            "presentation": { "group": "gate" }
+        },
+        {
+            "label": "clippy (desktop backend)",
+            "type": "shell",
+            "command": "cargo clippy --all-targets -- -D warnings",
+            "options": { "cwd": "${workspaceFolder}/apps/desktop/src-tauri" },
+            "problemMatcher": ["$rustc"],
+            "presentation": { "group": "gate" }
+        },
+        {
+            "label": "cargo test (workspace)",
+            "type": "cargo",
+            "command": "test",
+            "args": ["--workspace", "--no-fail-fast"],
+            "problemMatcher": ["$rustc"],
+            "group": { "kind": "test", "isDefault": true },
+            "presentation": { "group": "gate" }
+        },
+        {
+            "label": "frontend: typecheck + lint + test",
+            "type": "shell",
+            "command": "npm run typecheck && npm run lint && npm test -- --run",
+            "options": { "cwd": "${workspaceFolder}/apps/desktop" },
+            "problemMatcher": ["$tsc"],
+            "presentation": { "group": "gate" }
+        },
+        {
+            "label": "Kwaliteitspoort",
+            "detail": "fmt-check → clippy (core + desktop) → alle Rust-tests → frontend checks",
+            "dependsOrder": "sequence",
+            "dependsOn": ["fmt-check", "clippy (workspace)", "clippy (desktop backend)", "cargo test (workspace)", "frontend: typecheck + lint + test"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Linux-validatie (WSL Ubuntu)",
+            "detail": "Kopieert de repo naar ~/agentshield-linux-test in WSL en draait clippy + alle tests (Linux Mint 22-basis)",
+            "type": "shell",
+            "command": "pwsh -NoProfile -File ${workspaceFolder}/scripts/linux-check.ps1",
+            "problemMatcher": []
+        },
+        {
+            "label": "cargo fmt",
+            "type": "cargo",
+            "command": "fmt",
+            "args": ["--all"],
+            "problemMatcher": []
+        },
+
+        // --- Run (isolated test profile) -----------------------------------------
+        {
+            "label": "Daemon (voorgrond, testprofiel)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "daemon", "run"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Status (testprofiel)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "status"],
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Mode wijzigen (testprofiel)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "mode", "${input:mode}", "--yes"],
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Hook-fixture afspelen (testprofiel)",
+            "detail": "Stuurt een Claude Code-hookpayload door de echte hook en toont wat Claude Code zou ontvangen",
+            "type": "shell",
+            "command": "Get-Content -Raw fixtures/claude-code/${input:fixture} | cargo run -q -p agentshield -- hook",
+            "options": { "shell": { "executable": "pwsh", "args": ["-NoProfile", "-Command"] } },
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Commando analyseren (nooit uitgevoerd)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "command", "analyze", "${input:command}"],
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Live events volgen (testprofiel)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "watch"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Self-test (testprofiel)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "selftest"],
+            "problemMatcher": ["$rustc"]
+        },
+        {
+            "label": "Doctor (testprofiel)",
+            "type": "cargo",
+            "command": "run",
+            "args": ["-p", "agentshield", "--", "doctor"],
+            "problemMatcher": ["$rustc"]
+        },
+
+        // --- Desktop -----------------------------------------------------------------
+        {
+            "label": "Desktop: dev (Tauri + Vite, testprofiel)",
+            "type": "shell",
+            "command": "npx tauri dev",
+            "options": {
+                "cwd": "${workspaceFolder}/apps/desktop",
+                "env": { "AGENTSHIELD_CLI": "${workspaceFolder}/target/debug/agentshield.exe" }
+            },
+            "dependsOn": ["cargo build"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Desktop: UI in browser (Demo Mode)",
+            "type": "shell",
+            "command": "npm run dev",
+            "options": { "cwd": "${workspaceFolder}/apps/desktop" },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+
+        // --- Packaging -----------------------------------------------------------
+        {
+            "label": "Windows-pakket bouwen (NSIS + MSI)",
+            "type": "shell",
+            "command": "pwsh -NoProfile -File ${workspaceFolder}/scripts/package-windows.ps1",
+            "problemMatcher": []
+        },
+        {
+            "label": "cargo doc (openen)",
+            "type": "cargo",
+            "command": "doc",
+            "args": ["--workspace", "--no-deps", "--open"],
+            "problemMatcher": ["$rustc"]
+        }
+    ]
+}

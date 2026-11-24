@@ -1,0 +1,23 @@
+[package]
+name = "agentshield-risk-engine"
+description = "Deterministic, explainable risk scoring for AI agent actions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-command-parser.workspace = true
+agentshield-secret-detector.workspace = true
+agentshield-supply-chain.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

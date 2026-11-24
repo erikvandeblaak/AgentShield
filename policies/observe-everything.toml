@@ -1,0 +1,7 @@
+# AgentShield policy preset: observe-everything
+# Record everything, never block. Risk scores are still computed and shown.
+# Rules are evaluated for every event; decisions only take effect in Interactive,
+# Enforce and Lockdown mode. In Monitor/Shadow mode they are recorded as "would ...".
+schema_version = 1
+name = "observe-everything"
+description = "Record everything, never block. Risk scores are still computed and shown."

@@ -1,0 +1,21 @@
+{
+    // Open this file in VS Code (File → Open Workspace from File) for the full AgentShield
+    // workspace. Settings, tasks and launch configurations live in .vscode/.
+    "folders": [
+        { "name": "AgentShield", "path": "." }
+    ],
+    "settings": {
+        "window.title": "AgentShield — ${activeEditorShort}${separator}${rootName}"
+    },
+    "extensions": {
+        "recommendations": [
+            "rust-lang.rust-analyzer",
+            "tauri-apps.tauri-vscode",
+            "dbaeumer.vscode-eslint",
+            "bradlc.vscode-tailwindcss",
+            "tamasfe.even-better-toml",
+            "vadimcn.vscode-lldb",
+            "ms-vscode.cpptools"
+        ]
+    }
+}

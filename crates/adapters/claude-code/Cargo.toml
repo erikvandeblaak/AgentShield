@@ -1,0 +1,29 @@
+[package]
+name = "agentshield-adapter-claude-code"
+description = "Claude Code hook adapter: payload normalization, decision output, safe hook installer, MCP discovery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-command-parser.workspace = true
+agentshield-secret-detector.workspace = true
+agentshield-risk-engine.workspace = true
+agentshield-policy-engine.workspace = true
+agentshield-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

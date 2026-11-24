@@ -1,0 +1,18 @@
+{
+  "session_id": "abc123",
+  "transcript_path": "/home/dev/.claude/projects/p/abc123.jsonl",
+  "cwd": "/home/dev/project",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "mcp__github__create_issue",
+  "tool_input": {
+    "owner": "example",
+    "repo": "demo",
+    "title": "Bug"
+  },
+  "tool_use_id": "toolu_05MCP",
+  "mcp_server": {
+    "name": "github",
+    "source": "user"
+  }
+}

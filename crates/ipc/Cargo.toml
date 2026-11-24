@@ -1,0 +1,28 @@
+[package]
+name = "agentshield-ipc"
+description = "Authenticated local IPC (named pipes / Unix domain sockets) for AgentShield"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-audit-log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+hex.workspace = true
+getrandom.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[lints]
+workspace = true

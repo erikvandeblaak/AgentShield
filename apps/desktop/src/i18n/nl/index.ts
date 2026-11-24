@@ -1,0 +1,22 @@
+import type { Dict } from "../index";
+import { common } from "./common";
+import { enums } from "./enums";
+import { shell } from "./shell";
+import { overview } from "./overview";
+import { live } from "./live";
+import { threats } from "./threats";
+import { sessions } from "./sessions";
+import { agents } from "./agents";
+import { approvals } from "./approvals";
+import { policy } from "./policy";
+import { simulator } from "./simulator";
+import { secrets } from "./secrets";
+import { mcp } from "./mcp";
+import { supply } from "./supply";
+import { network } from "./network";
+import { reports } from "./reports";
+import { settings } from "./settings";
+import { about } from "./about";
+import { onboarding } from "./onboarding";
+
+export const nl: Dict = { common, enums, shell, overview, live, threats, sessions, agents, approvals, policy, simulator, secrets, mcp, supply, network, reports, settings, about, onboarding };

@@ -1,0 +1,18 @@
+Erik's AgentShield
+Copyright 2026 Erik van de Blaak (https://www.vandeblaak.com)
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles third-party components:
+
+- Apache ECharts — Apache-2.0. Its NOTICE follows:
+
+    Apache ECharts
+    Copyright 2017-2026 The Apache Software Foundation
+    
+    This product includes software developed at
+    The Apache Software Foundation (https://www.apache.org/).
+- Geist and JetBrains Mono fonts — SIL Open Font License 1.1 (licenses/OFL-*.txt).
+- SQLite (bundled via rusqlite/libsqlite3-sys) — public domain.
+- MPL-2.0 Rust crates used unmodified: option-ext (core); cssparser, cssparser-macros, selectors, dtoa-short (desktop). Source: crates.io.
+- All other Rust and npm dependencies are under permissive licenses (MIT, Apache-2.0, BSD, ISC, Zlib, Unicode); see docs/LICENSING.md.

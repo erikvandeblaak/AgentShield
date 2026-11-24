@@ -1,0 +1,27 @@
+{
+    "recommendations": [
+        // Rust: language server (clippy on save, test explorer, Run/Debug code lenses)
+        "rust-lang.rust-analyzer",
+        // Debuggers: cppvsdbg (MSVC, Windows) and LLDB (tests, Linux/WSL)
+        "ms-vscode.cpptools",
+        "vadimcn.vscode-lldb",
+        // Cargo.toml / policies/*.toml / config.toml
+        "tamasfe.even-better-toml",
+        // Outdated crate / npm versions inline
+        "fill-labs.dependi",
+        // Errors and clippy warnings inline at the line
+        "usernamehw.errorlens",
+        // Desktop app: Tauri commands, ESLint, Tailwind CSS v4 classes
+        "tauri-apps.tauri-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        // Tests for the React UI (vitest)
+        "vitest.explorer",
+        // scripts/*.ps1 (packaging)
+        "ms-vscode.powershell",
+        // Linux validation in WSL Ubuntu 24.04 (base of Linux Mint 22)
+        "ms-vscode-remote.remote-wsl",
+        // SQLite audit DB inspection (read-only use recommended)
+        "qwtel.sqlite-viewer"
+    ]
+}

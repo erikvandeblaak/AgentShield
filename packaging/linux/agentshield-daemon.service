@@ -1,0 +1,21 @@
+# Optional user-level systemd service for the AgentShield daemon (no root required).
+# Install:  mkdir -p ~/.config/systemd/user && cp agentshield-daemon.service ~/.config/systemd/user/
+#           systemctl --user daemon-reload && systemctl --user enable --now agentshield-daemon
+# The hook also starts the daemon on demand, so this service is optional.
+[Unit]
+Description=AgentShield daemon (local AI agent security & observability)
+Documentation=https://www.vandeblaak.com
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/agentshield daemon run
+Restart=on-failure
+RestartSec=3
+# Hardening that does not interfere with reading ~/.claude or writing the data dir.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/agentshield %h/.config/agentshield
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Erik’s AgentShield",
+  "version": "0.1.0",
+  "identifier": "com.vandeblaak.agentshield",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Erik's AgentShield — Local AI Agent Security & Observability",
+        "width": 1480,
+        "height": 940,
+        "minWidth": 1100,
+        "minHeight": 700,
+        "center": true,
+        "backgroundColor": "#0a0f1e"
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data:",
+        "font-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'",
+        "frame-ancestors": "'none'"
+      },
+      "freezePrototype": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "deb", "appimage"],
+    "publisher": "Erik van de Blaak",
+    "homepage": "https://www.vandeblaak.com",
+    "copyright": "© 2026 Erik van de Blaak — Apache-2.0",
+    "category": "DeveloperTool",
+    "shortDescription": "Local AI Agent Security & Observability",
+    "longDescription": "Erik's AgentShield observes, explains and (optionally) enforces policies for AI coding agents such as Claude Code. Local-first: no account, no cloud, no telemetry.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "externalBin": ["binaries/agentshield"],
+    "windows": {
+      "nsis": { "installMode": "currentUser" }
+    },
+    "linux": {
+      "deb": { "section": "devel" }
+    }
+  }
+}

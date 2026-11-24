@@ -1,0 +1,128 @@
+# AgentShield policy preset: production-server
+# Very restrictive policy for agents on servers: read-only inspection only, no network, no MCP.
+# Rules are evaluated for every event; decisions only take effect in Interactive,
+# Enforce and Lockdown mode. In Monitor/Shadow mode they are recorded as "would ...".
+schema_version = 1
+name = "production-server"
+description = "Very restrictive policy for agents on servers: read-only inspection only, no network, no MCP."
+
+[thresholds]
+warn_at = 20
+ask_at = 30
+deny_at = 50
+
+# --- Shared protections ------------------------------------------------------------
+
+[[rules]]
+id = "agentshield-self-protection"
+name = "Agents may not weaken AgentShield or their own hooks/permissions"
+hard = true
+[rules.match]
+finding_ids = ["tamper.*", "path.agent_configuration.write", "path.agentshield_configuration.write", "mcp.path.agent_configuration.write", "mcp.path.agentshield_configuration.write"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Changing AI agent hooks, permissions or AgentShield itself is reserved for the user"
+suggestion = "Make this change yourself, outside the agent session."
+
+[[rules]]
+id = "block-catastrophic-deletes"
+name = "Root/home/system deletes and disk formatting"
+hard = true
+[rules.match]
+finding_ids = ["shell.rm_recursive_root", "shell.rm_no_preserve_root", "shell.disk_format", "shell.dd_device", "shell.fork_bomb"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Catastrophic, irreversible deletion"
+
+[[rules]]
+id = "block-credential-dumping"
+name = "Credential dumping tools and hive exports"
+hard = true
+[rules.match]
+finding_ids = ["cred.dumping_tool", "cred.reg_save_hive"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Credential dumping"
+
+[[rules]]
+id = "block-remote-code-execution"
+name = "Download-and-execute, reverse shells, obfuscated execution"
+[rules.match]
+finding_ids = ["shell.download_pipe_exec", "shell.ps_download_exec", "shell.decode_pipe_exec", "network.reverse_shell", "shell.dev_tcp", "lolbin.*"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Remote or obfuscated code execution"
+suggestion = "Download to a file, review it and run it yourself."
+
+[[rules]]
+id = "block-exfiltration-chains"
+name = "Credential read combined with network transfer"
+[rules.match]
+finding_ids = ["shell.sensitive_read_and_network", "network.secret_in_url", "network.secret_in_search"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Possible credential exfiltration"
+
+[[rules]]
+id = "prod-deny-file-changes"
+name = "No file writes or edits"
+[rules.match]
+event_types = ["file.write", "file.edit"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Production server: file changes are not allowed"
+
+[[rules]]
+id = "prod-only-inspection-commands"
+name = "Only inspection commands"
+[rules.match]
+event_types = ["shell.exec"]
+[rules.unless]
+all_segments_match = [
+  "^(ls|dir|pwd|cd|echo|cat|type|head|tail|less|more|wc|stat|file|tree|which|where|whoami|date|uname|hostname|printf)( |$)",
+  "^(grep|rg|find|fd|findstr|select-string|get-childitem|gci|get-content|gc|get-item|get-location|resolve-path|test-path|measure-object|sort|uniq|cut|awk|jq|yq|diff|cmp|du|df)( |$)",
+  "^git (status|log|diff|show|branch|tag|remote -v|rev-parse|ls-files|blame|describe|shortlog|stash list|config --get|config --list)( |$)",
+  "^(cargo|npm|node|python3?|php|composer|go|rustc|dotnet|java) (--version|-v|-V|version)$",
+  "^(systemctl status|journalctl|ps|free|uptime|docker ps|docker logs|kubectl get|kubectl describe|kubectl logs)( |$)",
+]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Production server: only inspection commands are allowed"
+
+[[rules]]
+id = "prod-no-network"
+name = "No web fetch / search"
+[rules.match]
+event_types = ["network.fetch", "network.search"]
+[rules.effect]
+action = "deny"
+severity = "high"
+reason = "Production server: no outbound web access from the agent"
+
+[[rules]]
+id = "prod-no-mcp"
+name = "No MCP tools"
+[rules.match]
+event_types = ["mcp.call"]
+[rules.effect]
+action = "deny"
+severity = "high"
+reason = "Production server: MCP tools are disabled"
+
+[[rules]]
+id = "prod-deny-secret-files"
+name = "Credential files are off limits"
+[rules.match]
+categories = ["secret_access", "credential_exposure"]
+min_score = 40
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Production server: credential access"

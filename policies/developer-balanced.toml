@@ -1,0 +1,123 @@
+# AgentShield policy preset: developer-balanced
+# Normal development allowed; risky actions flagged; dangerous actions need approval or are denied.
+# Rules are evaluated for every event; decisions only take effect in Interactive,
+# Enforce and Lockdown mode. In Monitor/Shadow mode they are recorded as "would ...".
+schema_version = 1
+name = "developer-balanced"
+description = "Normal development allowed; risky actions flagged; dangerous actions need approval or are denied."
+
+[thresholds]
+warn_at = 40
+ask_at = 70
+deny_at = 90
+
+# --- Shared protections ------------------------------------------------------------
+
+[[rules]]
+id = "agentshield-self-protection"
+name = "Agents may not weaken AgentShield or their own hooks/permissions"
+hard = true
+[rules.match]
+finding_ids = ["tamper.*", "path.agent_configuration.write", "path.agentshield_configuration.write", "mcp.path.agent_configuration.write", "mcp.path.agentshield_configuration.write"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Changing AI agent hooks, permissions or AgentShield itself is reserved for the user"
+suggestion = "Make this change yourself, outside the agent session."
+
+[[rules]]
+id = "block-catastrophic-deletes"
+name = "Root/home/system deletes and disk formatting"
+hard = true
+[rules.match]
+finding_ids = ["shell.rm_recursive_root", "shell.rm_no_preserve_root", "shell.disk_format", "shell.dd_device", "shell.fork_bomb"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Catastrophic, irreversible deletion"
+
+[[rules]]
+id = "block-credential-dumping"
+name = "Credential dumping tools and hive exports"
+hard = true
+[rules.match]
+finding_ids = ["cred.dumping_tool", "cred.reg_save_hive"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Credential dumping"
+
+[[rules]]
+id = "block-remote-code-execution"
+name = "Download-and-execute, reverse shells, obfuscated execution"
+[rules.match]
+finding_ids = ["shell.download_pipe_exec", "shell.ps_download_exec", "shell.decode_pipe_exec", "network.reverse_shell", "shell.dev_tcp", "lolbin.*"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Remote or obfuscated code execution"
+suggestion = "Download to a file, review it and run it yourself."
+
+[[rules]]
+id = "block-exfiltration-chains"
+name = "Credential read combined with network transfer"
+[rules.match]
+finding_ids = ["shell.sensitive_read_and_network", "network.secret_in_url", "network.secret_in_search"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Possible credential exfiltration"
+
+[[rules]]
+id = "ask-secret-files"
+name = "Reading credential files needs approval"
+[rules.match]
+categories = ["secret_access"]
+min_score = 60
+[rules.effect]
+action = "ask"
+severity = "high"
+reason = "Reads a credential file"
+suggestion = "Add the needed (non-secret) values to a .env.example instead."
+
+[[rules]]
+id = "ask-git-history"
+name = "History-rewriting git operations"
+[rules.match]
+finding_ids = ["git.force_push", "git.history_rewrite", "git.reflog_expire", "git.push_delete", "shell.rm_git_dir"]
+[rules.effect]
+action = "ask"
+severity = "high"
+reason = "Rewrites or deletes git history"
+
+[[rules]]
+id = "ask-system-changes"
+name = "Persistence, security configuration and privilege changes"
+[rules.match]
+categories = ["persistence_indicator", "security_configuration_change", "privilege_escalation"]
+min_score = 55
+[rules.effect]
+action = "ask"
+severity = "high"
+reason = "Changes system security, autostart or privileges"
+
+[[rules]]
+id = "ask-infrastructure"
+name = "Cloud / cluster / infrastructure changes"
+[rules.match]
+categories = ["infrastructure_modification"]
+min_score = 50
+[rules.effect]
+action = "ask"
+severity = "high"
+reason = "Modifies infrastructure"
+
+[[rules]]
+id = "ask-suspicious-packages"
+name = "Possible typosquatted package or dependency confusion"
+[rules.match]
+finding_ids = ["supply.typosquat", "supply.dependency_confusion"]
+[rules.effect]
+action = "ask"
+severity = "high"
+reason = "Package name or index looks suspicious"

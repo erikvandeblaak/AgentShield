@@ -1,0 +1,75 @@
+[workspace]
+resolver = "3"
+exclude = ["apps/desktop/src-tauri"]
+members = [
+    "crates/event-model",
+    "crates/command-parser",
+    "crates/secret-detector",
+    "crates/supply-chain",
+    "crates/risk-engine",
+    "crates/policy-engine",
+    "crates/audit-log",
+    "crates/ipc",
+    "crates/core",
+    "crates/reporting",
+    "crates/daemon",
+    "crates/adapters/claude-code",
+    "apps/cli",
+]
+default-members = ["apps/cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Erik van de Blaak"]
+license = "Apache-2.0"
+homepage = "https://www.vandeblaak.com"
+rust-version = "1.88"
+
+[workspace.dependencies]
+agentshield-event-model = { path = "crates/event-model" }
+agentshield-command-parser = { path = "crates/command-parser" }
+agentshield-secret-detector = { path = "crates/secret-detector" }
+agentshield-supply-chain = { path = "crates/supply-chain" }
+agentshield-risk-engine = { path = "crates/risk-engine" }
+agentshield-policy-engine = { path = "crates/policy-engine" }
+agentshield-audit-log = { path = "crates/audit-log" }
+agentshield-ipc = { path = "crates/ipc" }
+agentshield-core = { path = "crates/core" }
+agentshield-daemon = { path = "crates/daemon" }
+agentshield-reporting = { path = "crates/reporting" }
+agentshield-adapter-claude-code = { path = "crates/adapters/claude-code" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+toml = "0.9"
+globset = "0.4"
+regex = "1"
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.22"
+rusqlite = { version = "0.37", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+getrandom = "0.3"
+dirs = "6"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3"
+proptest = "1"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

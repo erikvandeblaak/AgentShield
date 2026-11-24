@@ -1,0 +1,25 @@
+[package]
+name = "agentshield-policy-engine"
+description = "Declarative TOML policy engine and mode decision logic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-command-parser.workspace = true
+agentshield-secret-detector.workspace = true
+agentshield-risk-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+globset.workspace = true
+regex.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,38 @@
+[package]
+name = "agentshield"
+description = "AgentShield — local AI agent security & observability (CLI, hook and daemon)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "agentshield"
+path = "src/main.rs"
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-command-parser.workspace = true
+agentshield-policy-engine.workspace = true
+agentshield-audit-log.workspace = true
+agentshield-ipc.workspace = true
+agentshield-core.workspace = true
+agentshield-daemon.workspace = true
+agentshield-adapter-claude-code.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

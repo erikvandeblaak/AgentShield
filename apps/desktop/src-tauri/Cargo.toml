@@ -1,0 +1,38 @@
+[package]
+name = "agentshield-desktop"
+version = "0.1.0"
+description = "AgentShield desktop dashboard (Tauri 2)"
+authors = ["Erik van de Blaak"]
+license = "Apache-2.0"
+edition = "2024"
+rust-version = "1.92"
+
+# Separate workspace: keeps Tauri/WebView dependencies out of the core workspace builds.
+[workspace]
+
+[lib]
+name = "agentshield_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+agentshield-event-model = { path = "../../../crates/event-model" }
+agentshield-policy-engine = { path = "../../../crates/policy-engine" }
+agentshield-audit-log = { path = "../../../crates/audit-log" }
+agentshield-ipc = { path = "../../../crates/ipc" }
+agentshield-core = { path = "../../../crates/core" }
+agentshield-adapter-claude-code = { path = "../../../crates/adapters/claude-code" }
+
+[lints.rust]
+unsafe_code = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

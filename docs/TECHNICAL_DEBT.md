@@ -1,0 +1,16 @@
+# Technical debt & deliberate gaps
+
+| Id | Item | Why deferred | Next step |
+|---|---|---|---|
+| TD-001 | No code signing / update signature verification | Needs certificates and a release pipeline | Authenticode + minisign for releases; Tauri updater with signature check (opt-in) |
+| TD-002 | No OSV / vulnerability lookups for packages | Offline-first; must be opt-in | Optional local OSV database import + `supply.known_vulnerability` finding |
+| TD-003 | MCP tool descriptions are not inspected (no proxy) | Needs an explicit, opt-in local MCP proxy | `agentshield mcp proxy` that pins tool descriptions and flags changes (tool poisoning / rug pull) |
+| TD-004 | Interactive Mode uses Claude Code's native prompt only | Only reliable pause surface today | Own scoped approvals if Claude Code exposes a blocking approval API |
+| TD-005 | Shell parser is a tokenizer, not a full AST | Robust enough for classification; full grammars are large | tree-sitter-bash / PowerShell AST for deeper analysis |
+| TD-006 | Network metadata only from tool inputs | No packet capture by design | Optional ETW (Windows) / eBPF (Linux) connection telemetry for agent process trees |
+| TD-007 | Same-user limitation | OS-level isolation needs admin/root | Optional service under a dedicated account; Landlock/AppContainer sandbox profiles |
+| TD-008 | Linux desktop app not built/tested on a real Mint desktop | WSL has no webkit2gtk dev packages installed (needs sudo) | `scripts/package-linux.sh` on Mint 22; CI job builds .deb/AppImage |
+| TD-009 | No OpenTelemetry export | Privacy-first; must be opt-in | OTLP exporter for redacted events |
+| TD-010 | Local AI Risk Advisor (Ollama) not implemented | Spec: later phase, optional | Opt-in summaries over redacted events |
+| TD-011 | Frontend asks for a few extra endpoints (count, get_session, per-preset policy view) | Not required for MVP | Add `count_events`, `get_session`, `preset_info` IPC methods |
+| TD-012 | `freezePrototype` disabled | ECharts incompatibility (SF-005) | Re-evaluate when ECharts supports frozen prototypes |

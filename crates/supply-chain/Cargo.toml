@@ -1,0 +1,16 @@
+[package]
+name = "agentshield-supply-chain"
+description = "Package manager action detection and supply-chain risk indicators"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+agentshield-command-parser.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="AgentShield app icon">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse"><stop stop-color="#111B30"/><stop offset="1" stop-color="#070C17"/></linearGradient>
+<radialGradient id="glow" cx="512" cy="430" r="520" gradientUnits="userSpaceOnUse"><stop stop-color="#22D3EE" stop-opacity=".22"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/></radialGradient>
+<linearGradient id="as-g" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse"><stop stop-color="#34D399"/><stop offset=".55" stop-color="#22D3EE"/><stop offset="1" stop-color="#8B7CF6"/></linearGradient>
+</defs>
+<rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+<rect width="1024" height="1024" rx="228" fill="url(#glow)"/>
+<rect x="3" y="3" width="1018" height="1018" rx="225" fill="none" stroke="#2A3854" stroke-width="6"/>
+<g transform="translate(152 152) scale(11.25)"><path d="M32 3.5 55.5 11.6V29.8C55.5 44.9 45.9 55.6 32 60.5 18.1 55.6 8.5 44.9 8.5 29.8V11.6Z" fill="url(#as-g)"/><path d="M17 29.5Q32 13.5 47 29.5 32 45.5 17 29.5Z" fill="none" stroke="#07111F" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="29.5" r="5.2" fill="#07111F"/><path d="M32 41.5V50" stroke="#07111F" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="52" r="2.4" fill="#07111F"/></g>
+</svg>

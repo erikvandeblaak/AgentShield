@@ -1,0 +1,122 @@
+{
+    // F5 = first configuration. MSVC debugger (cppvsdbg) on Windows; LLDB for tests / WSL.
+    // All configurations use an isolated profile (target/dev) — never your real
+    // AgentShield data or ~/.claude/settings.json.
+    "version": "0.2.0",
+    "inputs": [
+        {
+            "id": "crate",
+            "type": "pickString",
+            "description": "Welke crate wil je testen/debuggen?",
+            "options": [
+                "agentshield-command-parser",
+                "agentshield-risk-engine",
+                "agentshield-policy-engine",
+                "agentshield-secret-detector",
+                "agentshield-supply-chain",
+                "agentshield-audit-log",
+                "agentshield-ipc",
+                "agentshield-core",
+                "agentshield-daemon",
+                "agentshield-adapter-claude-code",
+                "agentshield-reporting",
+                "agentshield-event-model"
+            ],
+            "default": "agentshield-risk-engine"
+        },
+        {
+            "id": "testFilter",
+            "type": "promptString",
+            "description": "Testnaam-filter (leeg = alle tests van de crate)",
+            "default": ""
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Daemon — Debug (testprofiel)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/agentshield.exe",
+            "args": ["daemon", "run"],
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                { "name": "RUST_BACKTRACE", "value": "1" },
+                { "name": "AGENTSHIELD_LOG", "value": "debug" },
+                { "name": "AGENTSHIELD_HOME", "value": "${workspaceFolder}/target/dev/home" },
+                { "name": "CLAUDE_CONFIG_DIR", "value": "${workspaceFolder}/target/dev/claude" }
+            ],
+            "console": "integratedTerminal",
+            "preLaunchTask": "cargo build"
+        },
+        {
+            "name": "CLI — status (testprofiel)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/agentshield.exe",
+            "args": ["status"],
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                { "name": "AGENTSHIELD_HOME", "value": "${workspaceFolder}/target/dev/home" },
+                { "name": "CLAUDE_CONFIG_DIR", "value": "${workspaceFolder}/target/dev/claude" }
+            ],
+            "console": "integratedTerminal",
+            "preLaunchTask": "cargo build"
+        },
+        {
+            "name": "Hook — fixture debuggen (testprofiel)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/agentshield.exe",
+            "args": ["hook", "--event", "PreToolUse"],
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                { "name": "AGENTSHIELD_HOME", "value": "${workspaceFolder}/target/dev/home" },
+                { "name": "AGENTSHIELD_HOOK_DEBUG", "value": "1" }
+            ],
+            "console": "integratedTerminal",
+            "preLaunchTask": "cargo build"
+        },
+        {
+            "name": "Desktop — Debug (testprofiel, start Vite apart: task 'Desktop: UI in browser')",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/apps/desktop/src-tauri/target/debug/agentshield-desktop.exe",
+            "cwd": "${workspaceFolder}/apps/desktop",
+            "environment": [
+                { "name": "RUST_BACKTRACE", "value": "1" },
+                { "name": "AGENTSHIELD_HOME", "value": "${workspaceFolder}/target/dev/home" },
+                { "name": "CLAUDE_CONFIG_DIR", "value": "${workspaceFolder}/target/dev/claude" },
+                { "name": "AGENTSHIELD_CLI", "value": "${workspaceFolder}/target/debug/agentshield.exe" }
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Tests debuggen: crate kiezen",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": ["test", "--no-run", "--lib", "--package=${input:crate}"],
+                "filter": { "kind": "lib" }
+            },
+            "args": ["${input:testFilter}"],
+            "cwd": "${workspaceFolder}",
+            "env": { "RUST_BACKTRACE": "1" }
+        },
+        {
+            "name": "Daemon — Debug (LLDB, Linux/WSL)",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": ["build", "--bin=agentshield", "--package=agentshield"],
+                "filter": { "name": "agentshield", "kind": "bin" }
+            },
+            "args": ["daemon", "run"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1",
+                "AGENTSHIELD_HOME": "${workspaceFolder}/target/dev/home",
+                "CLAUDE_CONFIG_DIR": "${workspaceFolder}/target/dev/claude"
+            }
+        }
+    ]
+}

@@ -1,0 +1,18 @@
+{
+  "session_id": "abc123",
+  "transcript_path": "/home/dev/.claude/projects/p/abc123.jsonl",
+  "cwd": "/home/dev/project",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git status"
+  },
+  "tool_response": {
+    "stdout": "On branch main\nnothing to commit",
+    "stderr": "",
+    "interrupted": false
+  },
+  "tool_use_id": "toolu_01ABC",
+  "duration_ms": 41
+}
