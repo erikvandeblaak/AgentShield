@@ -277,6 +277,11 @@ impl Daemon {
         if cfg.paused {
             degraded.push("Monitoring is paused: decisions are not enforced".into());
         }
+        let osv_path = agentshield_osv::OsvDb::path(&self.paths.data_dir);
+        let osv_status = agentshield_osv::OsvDb::open_readonly(&osv_path)
+            .and_then(|db| db.status(&osv_path).ok())
+            .map(|s| serde_json::to_value(s).unwrap_or(Value::Null))
+            .unwrap_or(json!({ "enabled": false }));
         json!({
             "daemon_running": true,
             "daemon_version": agentshield_core::VERSION,
@@ -299,6 +304,7 @@ impl Daemon {
             "db_path": self.paths.db_file(),
             "version": agentshield_core::VERSION,
             "build": format!("{} {}", if cfg!(debug_assertions) { "debug" } else { "release" }, std::env::consts::OS),
+            "osv": osv_status,
         })
     }
 

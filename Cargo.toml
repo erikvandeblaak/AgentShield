@@ -12,6 +12,7 @@ members = [
     "crates/ipc",
     "crates/core",
     "crates/reporting",
+    "crates/osv",
     "crates/daemon",
     "crates/adapters/claude-code",
     "apps/cli",
@@ -38,6 +39,7 @@ agentshield-ipc = { path = "crates/ipc" }
 agentshield-core = { path = "crates/core" }
 agentshield-daemon = { path = "crates/daemon" }
 agentshield-reporting = { path = "crates/reporting" }
+agentshield-osv = { path = "crates/osv" }
 agentshield-adapter-claude-code = { path = "crates/adapters/claude-code" }
 
 serde = { version = "1", features = ["derive"] }

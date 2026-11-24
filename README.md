@@ -41,6 +41,14 @@ stricter — never weaker than its own permission settings.
 flags poisoned or changed ("rug pull") definitions, and — in Enforce/Lockdown — hides them from the model.
 Verified live with Claude Code. See [docs/MCP_PROXY.md](docs/MCP_PROXY.md).
 
+## Known vulnerabilities & malware (offline OSV)
+
+`agentshield osv update` downloads the public [OSV](https://osv.dev) data once (npm, PyPI, crates.io,
+Packagist, NuGet, RubyGems, Go — ~286 000 advisories incl. ~240 000 known malicious packages) into a local
+database. From then on every package the agent installs is checked **offline**: known malware is critical
+(hard-denied in Enforce), pinned versions with CVEs are scored by severity with the fixed version as the
+safer alternative. Nothing is downloaded unless you run the command.
+
 ## Honest coverage
 
 AgentShield sees what Claude Code's hooks expose. It does **not** see what child processes do beyond

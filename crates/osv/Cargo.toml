@@ -1,0 +1,24 @@
+[package]
+name = "agentshield-osv"
+description = "Offline OSV vulnerability / malicious-package database for AgentShield (explicit opt-in download)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+agentshield-event-model.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

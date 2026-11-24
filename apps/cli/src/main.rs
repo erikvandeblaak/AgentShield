@@ -101,6 +101,9 @@ enum Cmd {
     },
     /// Run an end-to-end self test through the real hook binary (no agent needed).
     Selftest,
+    /// Offline OSV database: known vulnerabilities and malicious packages (explicit download).
+    #[command(subcommand)]
+    Osv(OsvCmd),
     /// MCP servers: list, route through the AgentShield proxy, trust changed tool definitions.
     #[command(subcommand)]
     Mcp(McpCmd),
@@ -246,6 +249,24 @@ enum ReportCmd {
         kind: String,
         #[arg(long, default_value_t = 24)]
         hours: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum OsvCmd {
+    /// Download the public OSV data (only when you run this) and import it locally.
+    Update {
+        /// Comma-separated: npm,PyPI,crates.io,Packagist,NuGet,RubyGems,Go (default: all).
+        #[arg(long, value_delimiter = ',')]
+        ecosystems: Vec<String>,
+    },
+    /// Show which ecosystems are present and how old the data is.
+    Status,
+    /// Look up a package (and optionally an exact version) in the local database.
+    Check {
+        ecosystem: String,
+        name: String,
+        version: Option<String>,
     },
 }
 
@@ -994,6 +1015,7 @@ fn run(ctx: &Ctx, cmd: Cmd) -> anyhow::Result<i32> {
         },
         Cmd::Selftest => selftest(ctx),
         Cmd::Mcp(m) => mcp_cmd(ctx, m),
+        Cmd::Osv(o) => osv_cmd(ctx, o),
     }
 }
 
@@ -1047,6 +1069,193 @@ fn watch(ctx: &Ctx, min_score: u8) -> anyhow::Result<i32> {
                 )
             ),
             agentshield_ipc::Push::Heartbeat => {}
+        }
+    }
+}
+
+fn osv_cmd(ctx: &Ctx, o: OsvCmd) -> anyhow::Result<i32> {
+    let path = agentshield_osv::OsvDb::path(&ctx.paths.data_dir);
+    match o {
+        OsvCmd::Update { ecosystems } => {
+            ctx.paths.ensure()?;
+            let list: Vec<String> = if ecosystems.is_empty() {
+                agentshield_osv::ECOSYSTEMS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            } else {
+                ecosystems
+            };
+            for e in &list {
+                if !agentshield_osv::ECOSYSTEMS.contains(&e.as_str()) {
+                    anyhow::bail!(
+                        "unknown ecosystem '{e}' (valid: {})",
+                        agentshield_osv::ECOSYSTEMS.join(", ")
+                    );
+                }
+            }
+            let mut db = agentshield_osv::OsvDb::open(&path)?;
+            let mut summary = Vec::new();
+            for e in &list {
+                let tmp = ctx
+                    .paths
+                    .data_dir
+                    .join(format!("osv-{}.zip.part", e.replace('.', "_")));
+                if !ctx.json {
+                    eprint!(
+                        "{e:<10} downloading {}/{e}/all.zip … ",
+                        agentshield_osv::BASE_URL
+                    );
+                }
+                let mut last = 0u64;
+                let bytes = agentshield_osv::download(e, &tmp, &mut |n| {
+                    if !ctx.json && n - last > 8 * 1024 * 1024 {
+                        last = n;
+                        eprint!("{} MB … ", n / 1_048_576);
+                    }
+                });
+                let (bytes, skipped) = match bytes {
+                    Ok(r) => (r.bytes, r.skipped),
+                    Err(err) => {
+                        let _ = std::fs::remove_file(&tmp);
+                        eprintln!("{}", ctx.c("31", &format!("failed: {err}")));
+                        summary
+                            .push(json!({ "ecosystem": e, "ok": false, "error": err.to_string() }));
+                        continue;
+                    }
+                };
+                let n = db.import_zip(e, &tmp);
+                let _ = std::fs::remove_file(&tmp);
+                match n {
+                    Ok(n) => {
+                        if !ctx.json {
+                            eprintln!(
+                                "{}",
+                                ctx.c(
+                                    "32",
+                                    &format!(
+                                        "{n} advisories ({:.1} MB)",
+                                        bytes as f64 / 1_048_576.0
+                                    )
+                                )
+                            );
+                            if !skipped.is_empty() {
+                                eprintln!(
+                                    "{}",
+                                    ctx.c("33", &format!(
+                                        "           {} advisory file(s) are listed but not publicly readable and were skipped: {}",
+                                        skipped.len(),
+                                        skipped.join(", ")
+                                    ))
+                                );
+                            }
+                        }
+                        summary.push(json!({
+                            "ecosystem": e, "ok": true, "advisories": n, "bytes": bytes,
+                            "skipped_not_public": skipped,
+                        }));
+                    }
+                    Err(err) => {
+                        eprintln!("{}", ctx.c("31", &format!("import failed: {err}")));
+                        summary
+                            .push(json!({ "ecosystem": e, "ok": false, "error": err.to_string() }));
+                    }
+                }
+            }
+            let ok = summary.iter().all(|s| s["ok"] == true);
+            if ctx.json {
+                println!("{}", serde_json::to_string_pretty(&summary)?);
+            } else if ok {
+                println!(
+                    "OSV data stored in {} — package installs are now checked offline.",
+                    path.display()
+                );
+            } else {
+                eprintln!(
+                    "Some ecosystems failed; the others were imported into {}.",
+                    path.display()
+                );
+            }
+            Ok(if ok { 0 } else { EXIT_ERR })
+        }
+        OsvCmd::Status => {
+            let Some(db) = agentshield_osv::OsvDb::open_readonly(&path) else {
+                ctx.out(&json!({ "enabled": false }), || "OSV database not downloaded. Run `agentshield osv update` (explicit opt-in download).".into());
+                return Ok(0);
+            };
+            let st = db.status(&path)?;
+            ctx.out(&serde_json::to_value(&st)?, || {
+                let mut s = String::new();
+                for e in &st.ecosystems {
+                    s.push_str(&format!(
+                        "{:<10} {:>7} advisories  {}\n",
+                        e.ecosystem,
+                        e.advisories,
+                        e.updated.clone().unwrap_or_else(|| "not downloaded".into())
+                    ));
+                }
+                if st.stale {
+                    s.push_str(&ctx.c(
+                        "33",
+                        &format!(
+                            "Data is older than {} days; run `agentshield osv update`.",
+                            agentshield_osv::STALE_DAYS
+                        ),
+                    ));
+                }
+                s
+            });
+            Ok(0)
+        }
+        OsvCmd::Check {
+            ecosystem,
+            name,
+            version,
+        } => {
+            let Some(db) = agentshield_osv::OsvDb::open_readonly(&path) else {
+                eprintln!("OSV database not downloaded. Run `agentshield osv update`.");
+                return Ok(EXIT_ERR);
+            };
+            let eco = agentshield_osv::ECOSYSTEMS
+                .iter()
+                .find(|e| e.eq_ignore_ascii_case(&ecosystem))
+                .ok_or_else(|| anyhow::anyhow!("unknown ecosystem '{ecosystem}'"))?;
+            let adv = db.lookup(eco, &name, version.as_deref())?;
+            let f = agentshield_osv::findings(
+                eco,
+                &name,
+                version.as_deref(),
+                &adv,
+                db.updated(eco).as_deref(),
+            );
+            ctx.out(&json!({ "advisories": adv, "findings": f }), || {
+                if f.is_empty() {
+                    format!(
+                        "No known advisories for {name}{} in the local OSV data.",
+                        version
+                            .as_deref()
+                            .map(|v| format!("@{v}"))
+                            .unwrap_or_default()
+                    )
+                } else {
+                    f.iter()
+                        .map(|x| {
+                            format!(
+                                "{} {} — {}",
+                                ctx.c(level_color(x.score), &format!("{:>3}", x.score)),
+                                x.id,
+                                x.explanation
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                }
+            });
+            Ok(if f.iter().any(|x| x.score >= 60) {
+                EXIT_CHECK
+            } else {
+                0
+            })
         }
     }
 }

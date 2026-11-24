@@ -48,6 +48,18 @@ severity = "critical"
 reason = "Credential dumping"
 
 [[rules]]
+id = "block-known-malicious-packages"
+name = "Packages listed as malicious in the OSV database"
+hard = true
+[rules.match]
+finding_ids = ["supply.known_malicious_package"]
+[rules.effect]
+action = "deny"
+severity = "critical"
+reason = "Known malicious package (OSV)"
+suggestion = "Check the package name for typos; never install packages flagged as malicious."
+
+[[rules]]
 id = "block-remote-code-execution"
 name = "Download-and-execute, reverse shells, obfuscated execution"
 [rules.match]

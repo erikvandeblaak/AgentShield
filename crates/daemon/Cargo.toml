@@ -16,6 +16,7 @@ agentshield-ipc.workspace = true
 agentshield-core.workspace = true
 agentshield-reporting.workspace = true
 agentshield-risk-engine.workspace = true
+agentshield-osv.workspace = true
 sha2.workspace = true
 hex.workspace = true
 agentshield-adapter-claude-code.workspace = true

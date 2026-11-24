@@ -3,7 +3,7 @@
 | Id | Item | Why deferred | Next step |
 |---|---|---|---|
 | TD-001 | No code signing / update signature verification | Needs certificates and a release pipeline | Authenticode + minisign for releases; Tauri updater with signature check (opt-in) |
-| TD-002 | No OSV / vulnerability lookups for packages | Offline-first; must be opt-in | Optional local OSV database import + `supply.known_vulnerability` finding |
+| TD-002 | OSV checks cover packages named on the command line only | Transitive dependencies and lockfile installs are not resolved; version matching for non-SemVer schemes is approximate | Lockfile parsing (package-lock, composer.lock, Cargo.lock, poetry.lock) |
 | TD-003 | MCP proxy covers stdio servers and tool definitions only | HTTP/SSE would need an HTTP proxy; resources/prompts not analyzed yet | HTTP MCP proxy (no TLS interception), resource/prompt analysis |
 | TD-004 | Interactive Mode uses Claude Code's native prompt only | Only reliable pause surface today | Own scoped approvals if Claude Code exposes a blocking approval API |
 | TD-005 | Shell parser is a tokenizer, not a full AST | Robust enough for classification; full grammars are large | tree-sitter-bash / PowerShell AST for deeper analysis |

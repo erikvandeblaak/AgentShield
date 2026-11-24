@@ -221,6 +221,25 @@ function SupplyView({ rows }: { rows: EventRow[] }) {
 
 function OsvNote() {
   const s = useT().supply;
+  const locale = useLocale();
+  const osv = useApp((st) => st.status?.osv);
+  if (osv?.enabled) {
+    const present = (osv.ecosystems ?? []).filter((e) => e.updated);
+    return (
+      <Callout tone={osv.stale ? "warn" : "ok"} title={osv.stale ? s.osvStaleTitle : s.osvOnTitle} className="mt-5">
+        <p className="mt-1">{s.osvOnBody}</p>
+        <ul className="mt-2 list-disc space-y-0.5 pl-4.5">
+          {present.map((e) => (
+            <li key={e.ecosystem}>
+              <span className="font-medium text-fg">{e.ecosystem}</span>{" — "}
+              {fmt(s.osvEcosystemLine, { n: formatNumber(e.advisories, locale), when: formatSmartTime(e.updated ?? "", locale) })}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-fg-3">{s.osvBody3}</p>
+      </Callout>
+    );
+  }
   return (
     <Callout tone="neutral" icon={CloudOff} title={s.osvTitle} className="mt-5">
       <ul className="mt-1 list-disc space-y-1 pl-4.5">

@@ -219,6 +219,16 @@ export interface AgentInfo {
   notes: string[];
 }
 
+export interface OsvEcosystemStatus { ecosystem: string; advisories: number; updated: string | null }
+
+/** Offline OSV database (known vulnerabilities / malicious packages); downloaded only on request. */
+export interface OsvStatus {
+  enabled: boolean;
+  path?: string;
+  ecosystems?: OsvEcosystemStatus[];
+  stale?: boolean;
+}
+
 export interface Status {
   daemon_running: boolean;
   daemon_version: string | null;
@@ -239,6 +249,7 @@ export interface Status {
   data_dir: string;
   config_dir: string;
   db_path: string;
+  osv?: OsvStatus; // absent on older daemons
   version: string; // AgentShield version
   build: string; // git/profile info
 }

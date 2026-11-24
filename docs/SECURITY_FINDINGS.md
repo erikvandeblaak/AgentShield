@@ -90,6 +90,26 @@ the database detectors (so `psql <<SQL … DROP TABLE …` is now *detected*), a
 The real daemon was stopped unexpectedly during development; hooks fell back to local evaluation (3 events,
 coverage `degraded`, 0 dropped), the hash chain stayed intact, and the daemon was restarted.
 
+## SF-015 — TLS interception by antivirus broke the OSV download (fixed)
+Norton inspects HTTPS with its own root certificate in the Windows trust store; the rustls client trusted
+only built-in roots (`UnknownIssuer`). The downloader now uses the OS trust store
+(`rustls-platform-verifier`) — certificate validation stays fully enabled. A quick diagnostic script that
+fell back to disabled verification was (rightly) blocked by Claude Code's safety classifier; verification
+is never disabled.
+
+## SF-016 — OSV advisories shared by ecosystems could disappear on re-import (fixed)
+Advisories were keyed by id only; an advisory affecting npm and PyPI was relabelled on the second import,
+and re-importing one ecosystem could delete it for the other. Key is now `(id, ecosystem)`; older
+databases are rebuilt (schema v2). Regression tests added; import and status counts now match exactly.
+
+## SF-017 — Concurrent OSV imports shared a temp directory (fixed)
+Found by running the test suite in parallel; temp directories are now unique per call.
+
+## SF-018 — Packagist has no public bulk file (handled)
+`Packagist/all.zip` returns 403. The downloader falls back to the bucket listing and fetches advisories
+individually (verified TLS, retries). One advisory object is listed but not public (403); it is skipped
+and reported in the command output — never silently.
+
 ## Open questions
 - Q-001: Own approval UI with scoped, expiring tokens in Interactive Mode? Currently delegated to the
   native prompt (ADR-0005) because it is the only surface that reliably pauses the agent.

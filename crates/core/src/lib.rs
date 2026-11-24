@@ -68,6 +68,8 @@ pub struct Engine {
     redactor: Redactor,
     home: Option<String>,
     cache: std::sync::Mutex<Vec<PolicyCache>>,
+    /// Offline OSV database (only if the user downloaded it); reopened when the file changes.
+    osv: std::sync::Mutex<Option<(String, agentshield_osv::OsvDb)>>,
 }
 
 fn mtime(p: &Path) -> String {
@@ -84,7 +86,70 @@ impl Engine {
             redactor: Redactor::new(key),
             home: dirs::home_dir().map(|h| h.to_string_lossy().into_owned()),
             cache: std::sync::Mutex::new(Vec::new()),
+            osv: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Known-vulnerability / malicious-package findings for package installs in a shell
+    /// command, from the local OSV database. Empty when no database was downloaded.
+    pub fn osv_findings(&self, ev: &NormalizedEvent) -> Vec<Finding> {
+        let ActionKind::ShellExec { command, shell } = &ev.action else {
+            return Vec::new();
+        };
+        let path = agentshield_osv::OsvDb::path(&self.paths.data_dir);
+        let stamp = mtime(&path);
+        if stamp == "none" {
+            return Vec::new();
+        }
+        let Ok(mut guard) = self.osv.lock() else {
+            return Vec::new();
+        };
+        if guard.as_ref().map(|(s, _)| s != &stamp).unwrap_or(true) {
+            *guard = agentshield_osv::OsvDb::open_readonly(&path).map(|db| (stamp.clone(), db));
+        }
+        let Some((_, db)) = guard.as_ref() else {
+            return Vec::new();
+        };
+        let pc = agentshield_command_parser::parse(command, *shell);
+        let mut out = Vec::new();
+        for seg in pc.all_segments() {
+            let Some(pa) = agentshield_supply_chain::detect(seg) else {
+                continue;
+            };
+            if !matches!(
+                pa.operation,
+                agentshield_supply_chain::Operation::Install
+                    | agentshield_supply_chain::Operation::Add
+                    | agentshield_supply_chain::Operation::Update
+                    | agentshield_supply_chain::Operation::Execute
+            ) {
+                continue;
+            }
+            let Some(eco) = agentshield_osv::osv_ecosystem(pa.ecosystem) else {
+                continue;
+            };
+            let updated = db.updated(eco);
+            if updated.is_none() {
+                continue; // this ecosystem was not downloaded
+            }
+            for p in pa
+                .packages
+                .iter()
+                .filter(|p| p.source == agentshield_supply_chain::PackageSource::Registry)
+                .take(50)
+            {
+                if let Ok(adv) = db.lookup(eco, &p.name, p.version.as_deref()) {
+                    out.extend(agentshield_osv::findings(
+                        eco,
+                        &p.name,
+                        p.version.as_deref(),
+                        &adv,
+                        updated.as_deref(),
+                    ));
+                }
+            }
+        }
+        out
     }
 
     pub fn redactor(&self) -> &Redactor {
@@ -187,10 +252,13 @@ impl Engine {
         started: Instant,
     ) -> Evaluation {
         let mut risk = agentshield_risk_engine::assess(ev, &self.risk_context(ev), &self.redactor);
-        let corr = correlation::correlate(ev, &risk, recent, cfg.correlation_window_minutes);
-        if !corr.is_empty() {
+        let mut extra = correlation::correlate(ev, &risk, recent, cfg.correlation_window_minutes);
+        if ev.phase == Phase::Pre {
+            extra.extend(self.osv_findings(ev));
+        }
+        if !extra.is_empty() {
             let mut findings = risk.findings.clone();
-            findings.extend(corr);
+            findings.extend(extra);
             risk = agentshield_risk_engine::finalize(findings, risk.uncertainties.clone());
         }
         let mut policy_errors = Vec::new();
@@ -422,7 +490,13 @@ impl Engine {
 
     /// Evaluate a hypothetical event for the simulator (nothing is executed or stored).
     pub fn simulate(&self, ev: &NormalizedEvent, preset: &str) -> Result<SimulationResult, String> {
-        let risk = agentshield_risk_engine::assess(ev, &self.risk_context(ev), &self.redactor);
+        let mut risk = agentshield_risk_engine::assess(ev, &self.risk_context(ev), &self.redactor);
+        let osv = self.osv_findings(ev);
+        if !osv.is_empty() {
+            let mut f = risk.findings.clone();
+            f.extend(osv);
+            risk = agentshield_risk_engine::finalize(f, risk.uncertainties.clone());
+        }
         let set = self.policy_set(preset, ev.ctx.workspace.as_deref())?;
         let policy = set.evaluate(ev, &risk);
         let mut modes = std::collections::BTreeMap::new();

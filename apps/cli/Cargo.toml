@@ -21,6 +21,7 @@ agentshield-core.workspace = true
 agentshield-daemon.workspace = true
 agentshield-adapter-claude-code.workspace = true
 agentshield-risk-engine.workspace = true
+agentshield-osv.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true

@@ -380,3 +380,102 @@ fn eval_latency_budget() {
     );
     assert!(p95 < 20_000, "p95 {p95}us");
 }
+
+#[test]
+fn osv_known_malicious_and_vulnerable_packages() {
+    let (_d, e) = engine();
+    // No OSV database: no OSV findings, no error.
+    let plain = e.evaluate(
+        &shell("npm install evil-fake-pkg"),
+        &cfg(Mode::Enforce),
+        &[],
+        true,
+        &[],
+        Instant::now(),
+    );
+    assert!(
+        !plain
+            .record
+            .risk
+            .findings
+            .iter()
+            .any(|f| f.id.starts_with("supply.known_"))
+    );
+    // Fictional advisories.
+    let mut db =
+        agentshield_osv::OsvDb::open(&agentshield_osv::OsvDb::path(&e.paths.data_dir)).unwrap();
+    db.import_advisories("npm", &[
+        serde_json::json!({"id": "MAL-2099-9", "summary": "fictional malware", "affected": [{"package": {"ecosystem": "npm", "name": "evil-fake-pkg"}, "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]}]}),
+        serde_json::json!({"id": "GHSA-fake-9", "summary": "fictional", "aliases": ["CVE-2099-9"], "database_specific": {"severity": "HIGH"}, "affected": [{"package": {"ecosystem": "npm", "name": "fakelib"}, "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "2.0.0"}]}]}]}),
+    ]).unwrap();
+    drop(db);
+    let bad = e.evaluate(
+        &shell("npm install evil-fake-pkg"),
+        &cfg(Mode::Enforce),
+        &[],
+        true,
+        &[],
+        Instant::now(),
+    );
+    assert!(
+        bad.record
+            .risk
+            .findings
+            .iter()
+            .any(|f| f.id == "supply.known_malicious_package"),
+        "{:?}",
+        bad.record.risk.findings
+    );
+    assert_eq!(
+        bad.mode_outcome.actual,
+        ActualDecision::Deny,
+        "hard rule denies malicious packages"
+    );
+    let vuln = e.evaluate(
+        &shell("npm install fakelib@1.4.0"),
+        &cfg(Mode::Enforce),
+        &[],
+        true,
+        &[],
+        Instant::now(),
+    );
+    let f = vuln
+        .record
+        .risk
+        .findings
+        .iter()
+        .find(|f| f.id == "supply.known_vulnerability")
+        .unwrap();
+    assert!(f.explanation.contains("CVE-2099-9"));
+    assert!(f.mitigation.as_deref().unwrap().contains("2.0.0"));
+    let ok = e.evaluate(
+        &shell("npm install fakelib@2.0.0"),
+        &cfg(Mode::Enforce),
+        &[],
+        true,
+        &[],
+        Instant::now(),
+    );
+    assert!(
+        !ok.record
+            .risk
+            .findings
+            .iter()
+            .any(|f| f.id.starts_with("supply.known_"))
+    );
+    // Monitor never blocks, even for malware.
+    let m = e.evaluate(
+        &shell("npm install evil-fake-pkg"),
+        &cfg(Mode::Monitor),
+        &[],
+        true,
+        &[],
+        Instant::now(),
+    );
+    assert_eq!(m.mode_outcome.actual, ActualDecision::NoOpinion);
+    // Simulator sees it too.
+    let sim = e
+        .simulate(&shell("npm i evil-fake-pkg"), "developer-balanced")
+        .unwrap();
+    assert_eq!(sim.policy.decision, PolicyDecision::Deny);
+}
