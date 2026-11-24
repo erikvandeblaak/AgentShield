@@ -339,8 +339,15 @@ pub fn assess_path(path: &str, write: bool, ctx: &RiskContext) -> Vec<Finding> {
     out
 }
 
+/// Locations an agent legitimately writes outside the project: temp dirs and Claude Code's
+/// own per-project memory/todo files (`~/.claude/projects/<p>/memory/`, `~/.claude/todos/`).
+/// Settings and hooks under `~/.claude` are NOT included (they are agent configuration).
 fn is_temp_path(np: &str) -> bool {
-    np.starts_with("/tmp/") || np.contains("/appdata/local/temp/") || np.starts_with("/var/tmp/")
+    np.starts_with("/tmp/")
+        || np.contains("/appdata/local/temp/")
+        || np.starts_with("/var/tmp/")
+        || (np.contains("/.claude/projects/") && np.contains("/memory/"))
+        || np.contains("/.claude/todos/")
 }
 
 pub(crate) fn expand_home(p: &str, ctx: &RiskContext) -> String {

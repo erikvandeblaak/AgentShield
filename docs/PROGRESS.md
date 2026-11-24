@@ -9,14 +9,14 @@ real binaries in an isolated profile — not by mock responses.
 |---|---|---|---|
 | 1 | Claude Code reliably detected | ✅ | `detect` finds 2.1.331 + executable; Agents page |
 | 2 | Hooks installed & removed safely | ✅ | dry-run, backup, atomic write, verify, rollback, exact uninstall; preserves other tools' hooks, permissions and key order (adapter tests + e2e) |
-| 3 | Real tool calls visible in the dashboard | ✅ (hook payloads) / ⏳ live Claude session | Real hook binary → daemon → SQLite → desktop app via CDP screenshots. A live Claude Code session was **not** run (needs your consent: uses your Claude account) |
+| 3 | Real tool calls visible in the dashboard | ✅ | Live Claude Code session blocked a sentinel command in Enforce mode (isolated profile); since 2026-11-24 the real installation records this developer's own Claude Code sessions |
 | 4 | Secrets redacted | ✅ | proptests; e2e greps the raw DB + WAL files for a fictional token and prompt text — absent |
 | 5 | Monitor Mode never blocks | ✅ | invariant tests over all presets × corpus; e2e |
 | 6 | Shadow Mode correct simulations | ✅ | would-deny recorded, no output; replay against other presets |
 | 7 | Daemon runs independently | ✅ | detached start, auto-start by hook after outage, survives GUI close (tray) |
 | 8 | SQLite audit logging reliable | ✅ | hash chain verify, concurrent writers, 100k events, recorded deletions |
 | 9 | GUI shows real realtime activity | ✅ | live subscription (push), screenshots with real events |
-| 10 | Windows 11 + Linux Mint within tested configs | ✅ Windows 11 / ✅ core on WSL Ubuntu 24.04 / ⏳ Linux desktop app | 141 Rust tests on both; Linux GUI bundle needs webkit2gtk dev packages (sudo) |
+| 10 | Windows 11 + Linux Mint within tested configs | ✅ Windows 11 / ✅ WSL Ubuntu 24.04 (Mint 22 base) | 144 Rust tests on both; e2e 38/38 on both; .deb + AppImage built; Linux GUI starts under WSLg (not visually verified on a Mint desktop) |
 | 11 | Integration coverage visible | ✅ | capability matrix (CLI, GUI, coverage report) |
 | 12 | Works without account / internet | ✅ | no network calls at runtime; offline-first |
 

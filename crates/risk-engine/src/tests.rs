@@ -358,3 +358,27 @@ proptest::proptest! {
         let _ = ps(&s);
     }
 }
+
+#[test]
+fn claude_memory_writes_are_not_outside_workspace() {
+    let w = |p: &str| {
+        assess(
+            &ev(
+                ActionKind::FileWrite {
+                    path: p.into(),
+                    content_len: None,
+                },
+                serde_json::json!({}),
+            ),
+            &ctx(),
+            &red(),
+        )
+    };
+    assert_eq!(
+        w(r"C:\Users\dev\.claude\projects\C--x\memory\note.md").score,
+        0
+    );
+    // but settings / hooks under ~/.claude remain agent-configuration tampering
+    assert!(w("/home/dev/.claude/settings.json").score >= 85);
+    assert!(w("/home/dev/.claude/hooks/x.sh").score >= 85);
+}

@@ -194,6 +194,8 @@ impl AuditLog {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        // Deleted rows are overwritten, so privacy deletions do not leave readable residue.
+        conn.pragma_update(None, "secure_delete", "ON")?;
         schema::migrate(&conn)?;
         Ok(AuditLog { conn })
     }
@@ -831,13 +833,48 @@ impl AuditLog {
         let n = self.delete_where("session_id = ?1", &[&session_id], "user deleted session")?;
         self.conn
             .execute("DELETE FROM incidents WHERE session_id = ?1", [session_id])?;
+        self.purge_residue()?;
         Ok(n)
+    }
+
+    /// Privacy deletion of specific events (e.g. a secret that slipped past redaction).
+    /// The deletion is recorded as a chain break; the WAL is checkpointed and truncated so
+    /// the removed content does not linger on disk.
+    pub fn delete_events(&mut self, ids: &[i64]) -> Result<u64> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let list = ids
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let n = self.delete_where(&format!("id IN ({list})"), &[], "user deleted events")?;
+        self.purge_residue()?;
+        Ok(n)
+    }
+
+    /// Checkpoint + truncate the WAL and reclaim free pages so deleted data is gone from disk.
+    pub fn purge_residue(&self) -> Result<()> {
+        let _: (i64, i64, i64) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?;
+        self.conn.execute_batch("VACUUM")?;
+        let _: (i64, i64, i64) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?;
+        Ok(())
     }
 
     /// Privacy deletion of everything.
     pub fn delete_all(&mut self) -> Result<u64> {
         let n = self.delete_where("1=1", &[], "user deleted all data")?;
         self.conn.execute("DELETE FROM incidents", [])?;
+        self.purge_residue()?;
         Ok(n)
     }
 

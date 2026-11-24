@@ -739,6 +739,12 @@ impl Handler for Daemon {
             Method::DeleteSession { session_id } => {
                 Ok(json!(self.db()?.delete_session(&session_id).map_err(hs)?))
             }
+            Method::DeleteEvents { ids } => {
+                if ids.len() > 10_000 {
+                    return Err(HandlerError::bad_request("too many ids"));
+                }
+                Ok(json!(self.db()?.delete_events(&ids).map_err(hs)?))
+            }
             Method::DeleteAll => Ok(json!(self.db()?.delete_all().map_err(hs)?)),
             Method::ApplyRetention => Ok(json!(self.apply_retention()?)),
             Method::McpServers => self.mcp_servers(),

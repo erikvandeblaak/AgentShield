@@ -67,6 +67,18 @@ never crosses the wire). An explicit DACL is a planned hardening step.
 Event summaries are agent-controlled; the CLI now strips control characters before printing so ANSI
 escape sequences in commands cannot manipulate the terminal.
 
+## SF-012 — Literal passwords in command lines were stored unredacted (fixed; residue needs user action)
+Found in **real use** on the developer's own installation: commands such as
+`echo '<password>' | sudo -S …` (run by the agent while installing packages) were stored in the audit log
+with the password in clear text — none of the provider/assignment patterns matched. Added detectors for
+passwords piped into `sudo -S`/`passwd`/`chpasswd`/`su`/`docker login --password-stdin`,
+`--password[=]`, `sshpass -p`, `mysql -p…`, `curl -u user:pass` and `PGPASSWORD=`-style variables, with
+false-positive tests (`$VAR` references, `mysql -p` prompt, `git log -p`). Added privacy deletion of
+specific events (`agentshield events delete <ids>`), recorded as a chain break, with `secure_delete`, WAL
+checkpoint and `VACUUM` so the content is physically removed. Deleting audit events is deliberately an
+action the **user** performs; an agent attempting it is blocked by Claude Code's own safety classifier
+(observed) and flagged by AgentShield's tamper detections.
+
 ## Open questions
 - Q-001: Own approval UI with scoped, expiring tokens in Interactive Mode? Currently delegated to the
   native prompt (ADR-0005) because it is the only surface that reliably pauses the agent.

@@ -74,6 +74,13 @@ fn patterns() -> &'static [Pattern] {
             p("bearer_token", "Bearer token", r"(?i)\bbearer\s+([A-Za-z0-9._~+/\-]{20,}=*)", 1, "medium"),
             p("basic_auth_url", "Credentials in URL", r"\bhttps?://[^\s:/@]+:([^\s@/]{3,})@", 1, "medium"),
             p("docker_auth", "Docker registry auth", r#""auth"\s*:\s*"([A-Za-z0-9+/=]{12,})""#, 1, "high"),
+            // Literal passwords in command lines (found in real use: `echo 'pw' | sudo -S ...`).
+            p("cli_password_stdin", "Password piped to a command", r#"(?i)\b(?:echo|printf)\s+(?:-[a-z]+\s+)?(?:'%s\\n'\s+)?['"]?([^'"\s|;&]{3,})['"]?\s*\|\s*(?:sudo\b[^|;&]*\s-S\b|passwd\b|chpasswd\b|su\b|openssl\b[^|;&]*-pass(?:in|out)?\s+stdin|docker\s+login\b[^|;&]*--password-stdin)"#, 1, "high"),
+            p("cli_password_flag", "Password command-line flag", r#"(?i)(?:^|\s)--?(?:password|passwd|pass|pwd|db-password|admin-password)(?:=|\s+)['"]?([^'"\s]{3,})"#, 1, "high"),
+            p("cli_sshpass", "sshpass password", r#"(?i)\bsshpass\s+-p\s*['"]?([^'"\s]+)"#, 1, "high"),
+            p("cli_mysql_password", "MySQL -p password", r#"(?i)\b(?:mysql|mysqldump|mariadb|mysqladmin)\b[^|;&\n]*?\s-p['"]?([^'"\s-][^'"\s]*)"#, 1, "high"),
+            p("cli_curl_user", "curl -u credentials", r#"(?i)\bcurl\b[^|;&\n]*?\s(?:-u|--user)\s*['"]?[^:'"\s]+:([^'"\s@]+)"#, 1, "high"),
+            p("cli_env_password", "Password environment variable", r#"(?i)\b(?:PGPASSWORD|MYSQL_PWD|SSHPASS|REDISCLI_AUTH|ANSIBLE_BECOME_PASS|SUDO_PASSWORD)=['"]?([^'"\s]{3,})"#, 1, "high"),
             p("generic_secret_assignment", "Secret-looking assignment", r#"(?i)\b[A-Z0-9_.\-]*(?:SECRET|TOKEN|PASSWORD|PASSWD|PASSPHRASE|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CLIENT_?SECRET|AUTH_?KEY|CREDENTIALS?)[A-Z0-9_.\-]*["']?\s*[=:]\s*["']?([^\s"'`,;]{8,})"#, 1, "medium"),
         ]
     })
@@ -107,6 +114,7 @@ pub fn shannon_entropy(s: &str) -> f64 {
 fn looks_like_placeholder(v: &str) -> bool {
     let l = v.to_ascii_lowercase();
     l.starts_with("${")
+        || l.starts_with('$')
         || l.starts_with("$(")
         || l.starts_with('<')
         || l.starts_with("{{")
@@ -404,6 +412,43 @@ mod tests {
         ] {
             let (o, m) = r().redact(ph);
             assert!(m.is_empty(), "placeholder flagged: {ph} -> {o}");
+        }
+    }
+
+    #[test]
+    fn cli_passwords_are_redacted() {
+        // All values fictional.
+        for (cmd, secret) in [
+            ("echo 'Zebra4711' | sudo -S apt-get install x", "Zebra4711"),
+            (
+                r"printf '%s\n' 'Zebra4711' | sudo -S -k -p '' true",
+                "Zebra4711",
+            ),
+            ("echo Zebra4711 | sudo -S -p '' ls", "Zebra4711"),
+            ("mysql -uroot -pZebra4711 app", "Zebra4711"),
+            ("sshpass -p Zebra4711 ssh host", "Zebra4711"),
+            ("curl -u admin:Zebra4711 https://x.example", "Zebra4711"),
+            ("PGPASSWORD=Zebra4711 psql -h db", "Zebra4711"),
+            ("tool --password=Zebra4711 --x", "Zebra4711"),
+            ("tool --password Zebra4711", "Zebra4711"),
+            (
+                "echo Zebra4711 | docker login -u me --password-stdin",
+                "Zebra4711",
+            ),
+        ] {
+            let (out, m) = r().redact(cmd);
+            assert!(!out.contains(secret), "{cmd} -> {out}");
+            assert!(!m.is_empty());
+        }
+        for benign in [
+            "echo hello | grep h",
+            "mysql -u root -p app",
+            "git log -p",
+            "curl -u $USER:$TOKEN https://x",
+            "tool --password=$PASS",
+        ] {
+            let (out, _) = r().redact(benign);
+            assert_eq!(out, benign, "false positive on {benign}");
         }
     }
 

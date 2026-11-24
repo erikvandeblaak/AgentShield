@@ -95,6 +95,10 @@ pub enum Method {
     DeleteSession {
         session_id: String,
     },
+    /// Privacy deletion of specific events (recorded as a chain break, residue purged).
+    DeleteEvents {
+        ids: Vec<i64>,
+    },
     DeleteAll,
     ApplyRetention,
     /// MCP servers from Claude Code config + observed MCP calls + change tracking.

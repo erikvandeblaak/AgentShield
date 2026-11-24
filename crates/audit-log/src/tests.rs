@@ -341,3 +341,31 @@ fn hundred_thousand_events_perf() {
     eprintln!("100k insert {insert:?}, filtered page {list:?}, stats {stats:?}");
     assert!(list.as_millis() < 2000);
 }
+
+#[test]
+fn delete_events_removes_content_from_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("p.db");
+    let mut db = AuditLog::open(&file).unwrap();
+    let mut batch: Vec<_> = (0..10).map(|i| rec(i, "s", 0)).collect();
+    batch[4].summary = "LEAKED-FICTIONAL-VALUE-123".into();
+    db.insert_batch(&mut batch).unwrap();
+    assert_eq!(db.delete_events(&[batch[4].id]).unwrap(), 1);
+    assert!(
+        db.verify().unwrap().ok,
+        "deletion is bridged, chain stays valid"
+    );
+    assert_eq!(db.count().unwrap(), 9);
+    drop(db);
+    let mut raw = Vec::new();
+    for suffix in ["", "-wal"] {
+        let p = dir.path().join(format!("p.db{suffix}"));
+        if p.exists() {
+            raw.extend(std::fs::read(p).unwrap());
+        }
+    }
+    assert!(
+        !raw.windows(26).any(|w| w == b"LEAKED-FICTIONAL-VALUE-123"),
+        "content must not remain on disk"
+    );
+}

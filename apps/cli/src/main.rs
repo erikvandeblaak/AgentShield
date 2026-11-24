@@ -211,6 +211,13 @@ enum EventsCmd {
     },
     /// Show one event in full (redacted).
     Show { id: i64 },
+    /// Permanently delete events (privacy). The deletion is recorded in the hash chain.
+    Delete {
+        #[arg(required = true)]
+        ids: Vec<i64>,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -361,9 +368,16 @@ fn event_line(ctx: &Ctx, r: &EventRow) -> String {
     if x.summary.chars().count() > 110 {
         summary.push('…');
     }
+    let phase = match x.phase.as_str() {
+        "pre" => "pre ",
+        "post" => "post",
+        _ => "    ",
+    };
     format!(
-        "{:>6} {local} {score} {would} {actual} {:<16} {summary}",
-        x.id, x.action_type
+        "{:>6} {local} {} {score} {would} {actual} {:<16} {summary}",
+        x.id,
+        ctx.c("2", phase),
+        x.action_type
     )
 }
 
@@ -817,6 +831,28 @@ fn run(ctx: &Ctx, cmd: Cmd) -> anyhow::Result<i32> {
                     Ok(EXIT_ERR)
                 }
             }
+        }
+        Cmd::Events(EventsCmd::Delete { ids, yes }) => {
+            if !confirm(
+                ctx,
+                yes,
+                &format!(
+                    "Permanently delete {} event(s)? The deletion itself is recorded in the audit chain.",
+                    ids.len()
+                ),
+            ) {
+                return Ok(EXIT_ABORT);
+            }
+            let n: u64 = match ctx.call(Method::DeleteEvents { ids: ids.clone() }) {
+                Ok(v) => serde_json::from_value(v)?,
+                Err(_) => agentshield_audit_log::AuditLog::open(&ctx.paths.db_file())
+                    .and_then(|mut db| db.delete_events(&ids))
+                    .map_err(|e| anyhow::anyhow!("{e}"))?,
+            };
+            ctx.out(&json!({ "deleted": n }), || {
+                format!("Deleted {n} event(s); residue purged from disk.")
+            });
+            Ok(0)
         }
         Cmd::Sessions(SessionsCmd::List { limit }) => {
             let v = match ctx.call(Method::Sessions { limit }) {
