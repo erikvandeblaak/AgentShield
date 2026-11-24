@@ -22,9 +22,9 @@ real binaries in an isolated profile — not by mock responses.
 
 ## Test inventory
 
-- Rust: 141 tests (incl. 5 property-test suites, 100k-event performance test, IPC fuzz-style frames,
+- Rust: 144 tests (incl. 5 property-test suites, 100k-event performance test, IPC fuzz-style frames,
   mode invariants) — green on Windows 11 and WSL Ubuntu 24.04.
-- End-to-end: 38/38 checks with the release binary (install → modes → fallback → integrity → uninstall).
+- End-to-end: 38/38 checks with the release binary on Windows 11 and on Linux (WSL Ubuntu 24.04) (install → modes → fallback → integrity → uninstall).
 - Frontend: 102 vitest tests, typecheck, ESLint, production build.
 - Desktop: release app driven over CDP against a real daemon with seeded hook events — 0 console errors.
 - Packaging: NSIS (per-user) + MSI built by `scripts/package-windows.ps1` with SHA-256 sums.
