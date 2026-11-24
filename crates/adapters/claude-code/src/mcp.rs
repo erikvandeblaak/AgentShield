@@ -57,6 +57,19 @@ pub fn assess_server(
     source: &Path,
     redactor: &Redactor,
 ) -> McpServerInfo {
+    // A server routed through the AgentShield proxy is assessed on its original command.
+    let routed = crate::mcp_wrap::is_wrapped(cfg);
+    let unwrapped;
+    let cfg = match crate::mcp_wrap::original_command(cfg) {
+        Some((c, a)) => {
+            let mut x = cfg.clone();
+            x["command"] = serde_json::json!(c);
+            x["args"] = serde_json::json!(a);
+            unwrapped = x;
+            &unwrapped
+        }
+        None => cfg,
+    };
     let transport = cfg
         .get("type")
         .and_then(|t| t.as_str())
@@ -175,7 +188,7 @@ pub fn assess_server(
         fingerprint,
         changed_since_last_seen: false,
         first_seen: None,
-        routed_via_agentshield: false,
+        routed_via_agentshield: routed,
         findings,
         observed_calls: 0,
         tools_seen: vec![],

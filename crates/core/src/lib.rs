@@ -152,6 +152,27 @@ impl Engine {
         }
     }
 
+    /// Build a record for an event whose findings were computed elsewhere (e.g. the MCP
+    /// proxy's tool-definition analysis). Goes through the same policy, redaction and record
+    /// path as every other event; never a decision point.
+    pub fn record_with_findings(
+        &self,
+        ev: &NormalizedEvent,
+        findings: Vec<Finding>,
+        cfg: &Config,
+        started: Instant,
+    ) -> AuditRecord {
+        let risk = agentshield_risk_engine::finalize(findings, Vec::new());
+        let set = self
+            .policy_set(&cfg.preset, ev.ctx.workspace.as_deref())
+            .or_else(|_| PolicySet::from_preset("developer-balanced").map_err(|e| e.to_string()))
+            .unwrap_or_else(|_| unreachable_policy());
+        let policy = set.evaluate(ev, &risk);
+        let mode = if cfg.paused { Mode::Monitor } else { cfg.mode };
+        let mo = apply_mode(mode, &policy, ev, &risk);
+        self.build_record(ev, risk, &policy, &mo, mode, true, &[], started)
+    }
+
     /// Evaluate a normalized event.
     ///
     /// * `recent` — recent records of the same session (newest first) for correlation.

@@ -40,6 +40,6 @@ real binaries in an isolated profile — not by mock responses.
 | 4 Desktop app | ✅ Windows; Linux bundle pending |
 | 5 Enforcement | ✅ Interactive (native prompt), Enforce, Lockdown on PreToolUse |
 | 6 Codex | ⛔ out of scope (owner decision: Claude Code only) |
-| 7 Broadening | 🟡 MCP Center (config + observed calls), supply chain (static); no MCP proxy / OSV |
+| 7 Broadening | 🟡 MCP Center + MCP proxy (tool-definition pinning, poisoning detection, enforcement; stdio), supply chain (static); no OSV yet |
 | 8 OS security | ⏳ not started (TD-006/007) |
 | 9 Hardening & release | 🟡 CI, cargo-deny, SBOM job, installers; signing pending |

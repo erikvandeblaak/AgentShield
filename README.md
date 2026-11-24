@@ -35,6 +35,12 @@ telemetry.
 AgentShield **never** returns `allow` and never rewrites tool input, so it can only make Claude Code
 stricter — never weaker than its own permission settings.
 
+## MCP tool-poisoning protection
+
+`agentshield mcp wrap` routes stdio MCP servers through a local proxy that pins every tool definition,
+flags poisoned or changed ("rug pull") definitions, and — in Enforce/Lockdown — hides them from the model.
+Verified live with Claude Code. See [docs/MCP_PROXY.md](docs/MCP_PROXY.md).
+
 ## Honest coverage
 
 AgentShield sees what Claude Code's hooks expose. It does **not** see what child processes do beyond

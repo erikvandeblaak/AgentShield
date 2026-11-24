@@ -109,6 +109,17 @@ pub enum Method {
     },
     DeleteAll,
     ApplyRetention,
+    /// Tool definitions seen by the MCP proxy in a `tools/list` response. Returns
+    /// [`McpToolsVerdict`].
+    McpTools {
+        server: String,
+        tools: Vec<McpToolDef>,
+    },
+    /// Accept the current tool definitions of a server (re-pin after a reviewed change).
+    McpTrust {
+        server: String,
+        actor: String,
+    },
     /// MCP servers from Claude Code config + observed MCP calls + change tracking.
     McpServers,
     /// Write a redacted export to the exports directory; returns `{path, count}`.
@@ -128,6 +139,24 @@ pub enum Method {
     Shutdown {
         actor: String,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpToolDef {
+    pub name: String,
+    pub description: String,
+    /// Input schema serialized as JSON text.
+    pub schema: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct McpToolsVerdict {
+    /// Tools the proxy must hide from `tools/list` and refuse in `tools/call`.
+    pub blocked: Vec<String>,
+    /// (tool, reason) for every flagged tool, blocked or not.
+    pub flagged: Vec<(String, String)>,
+    pub event_id: i64,
+    pub enforced: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

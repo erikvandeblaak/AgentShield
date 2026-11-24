@@ -122,7 +122,8 @@ impl Daemon {
             let is_corr = f.id.starts_with("correlation.");
             let is_tamper = f.id.starts_with("tamper.")
                 || f.category == RiskCategory::AgentConfigurationTampering && f.score >= 85;
-            if !(is_corr || is_tamper) {
+            let is_mcp = f.category == RiskCategory::McpToolPoisoning && f.score >= 70;
+            if !(is_corr || is_tamper || is_mcp) {
                 continue;
             }
             let mut ids = vec![rec.id];
@@ -144,6 +145,10 @@ impl Daemon {
                     "Agent repeatedly attempts denied actions"
                 }
                 _ if is_tamper => "Agent attempted to change security configuration",
+                "mcp.tool_description_changed" => {
+                    "MCP tool definition changed since it was first seen"
+                }
+                _ if is_mcp => "Suspicious MCP tool definition (possible tool poisoning)",
                 _ => "Correlated suspicious activity",
             };
             let sev = match RiskLevel::from_score(rec.risk.score.max(f.score)) {
@@ -406,6 +411,156 @@ impl Daemon {
             .simulate(&ev, &preset)
             .map_err(HandlerError::bad_request)?;
         serde_json::to_value(r).map_err(hs)
+    }
+
+    /// Analyze the tool definitions an MCP server advertised (via the MCP proxy): pin
+    /// first-seen fingerprints, flag changed/added tools and poisoning indicators, record an
+    /// audit event and return which tools the proxy must hide (only in Enforce/Lockdown).
+    pub fn mcp_tools(
+        &self,
+        server: &str,
+        tools: &[agentshield_ipc::McpToolDef],
+    ) -> Result<agentshield_ipc::McpToolsVerdict, HandlerError> {
+        use sha2::{Digest, Sha256};
+        let t0 = Instant::now();
+        let server: String = server
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(128)
+            .collect();
+        let prefix = format!("mcp_tool:{server}:");
+        let mut findings = Vec::new();
+        let mut per_tool: Vec<(String, u8, String)> = Vec::new();
+        {
+            let db = self.db()?;
+            let had_pins = !db.meta_with_prefix(&prefix).map_err(hs)?.is_empty();
+            for t in tools.iter().take(2000) {
+                let name: String = t.name.chars().take(256).collect();
+                let material = format!("{}\n{}", t.description, t.schema);
+                let fp = hex::encode(&Sha256::digest(material.as_bytes())[..8]);
+                let key = format!("{prefix}{name}");
+                let mut fs = agentshield_risk_engine::tool_definition_findings(
+                    &server,
+                    &name,
+                    &t.description,
+                    &t.schema,
+                );
+                match db.meta_get(&key).map_err(hs)? {
+                    Some(v) => {
+                        let pinned = v.split('|').next().unwrap_or("");
+                        if pinned != fp {
+                            fs.push(Finding {
+                                id: "mcp.tool_description_changed".into(),
+                                category: RiskCategory::McpToolPoisoning,
+                                score: 72,
+                                confidence: Confidence::Medium,
+                                explanation: format!("Definition of tool '{name}' changed since it was first seen (pinned {pinned}, now {fp}). This is how 'rug pull' attacks work; run `agentshield mcp trust {server}` after reviewing the change."),
+                                evidence: Some(format!("{server} → {name}")),
+                                mitigation: Some("Review the new description before trusting it.".into()),
+                            });
+                        }
+                    }
+                    None => {
+                        db.meta_set(&key, &format!("{fp}|{}", now_rfc3339()))
+                            .map_err(hs)?;
+                        if had_pins {
+                            fs.push(Finding {
+                                id: "mcp.tool_added".into(),
+                                category: RiskCategory::McpToolPoisoning,
+                                score: 35,
+                                confidence: Confidence::High,
+                                explanation: format!("New tool '{name}' appeared on a server whose tools were already known"),
+                                evidence: Some(format!("{server} → {name}")),
+                                mitigation: None,
+                            });
+                        }
+                    }
+                }
+                let max = fs.iter().map(|f| f.score).max().unwrap_or(0);
+                if max > 0 {
+                    let why = fs
+                        .iter()
+                        .max_by_key(|f| f.score)
+                        .map(|f| f.explanation.clone())
+                        .unwrap_or_default();
+                    per_tool.push((name.clone(), max, why));
+                }
+                findings.extend(fs);
+            }
+        }
+        let cfg = self.cfg();
+        let enforced = !cfg.paused && matches!(cfg.mode, Mode::Enforce | Mode::Lockdown);
+        let blocked: Vec<String> = if enforced {
+            per_tool
+                .iter()
+                .filter(|(_, s, _)| *s >= 70)
+                .map(|(n, _, _)| n.clone())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let ev = NormalizedEvent {
+            ctx: AgentContext {
+                agent: claude::AGENT_ID.into(),
+                hook_event: "McpToolsList".into(),
+                tool: Some(format!("mcp__{server}")),
+                ..Default::default()
+            },
+            phase: Phase::Lifecycle,
+            action: ActionKind::McpCall {
+                server: server.clone(),
+                tool: "tools/list".into(),
+            },
+            input: json!({ "tools": tools.len(), "flagged": per_tool.iter().map(|(n, s, _)| json!({ "tool": n, "score": s })).collect::<Vec<_>>(), "hidden_by_agentshield": blocked }),
+            post_failed: None,
+            response_text: None,
+            enforceable: false,
+        };
+        let mut rec = self.engine.record_with_findings(&ev, findings, &cfg, t0);
+        if !blocked.is_empty() {
+            rec.actual_decision = ActualDecision::Deny;
+            rec.decision_reason = Some(format!(
+                "MCP proxy hid {} tool(s): {}",
+                blocked.len(),
+                blocked.join(", ")
+            ));
+        }
+        self.store(&mut rec)?;
+        self.incidents_for(&rec);
+        Ok(agentshield_ipc::McpToolsVerdict {
+            blocked,
+            flagged: per_tool.into_iter().map(|(n, _, w)| (n, w)).collect(),
+            event_id: rec.id,
+            enforced,
+        })
+    }
+
+    pub fn mcp_trust(&self, server: &str, actor: &str) -> Result<Value, HandlerError> {
+        let n = self
+            .db()?
+            .meta_delete_prefix(&format!("mcp_tool:{server}:"))
+            .map_err(hs)?;
+        let ev = NormalizedEvent {
+            ctx: AgentContext {
+                agent: "agentshield".into(),
+                hook_event: "McpTrust".into(),
+                tool: Some(actor.chars().take(64).collect()),
+                ..Default::default()
+            },
+            phase: Phase::Lifecycle,
+            action: ActionKind::OtherTool {
+                tool: format!("mcp:trust:{server}"),
+            },
+            input: json!({ "server": server, "cleared_pins": n, "actor": actor }),
+            post_failed: None,
+            response_text: None,
+            enforceable: false,
+        };
+        let mut rec = self
+            .engine
+            .record_with_findings(&ev, vec![], &self.cfg(), Instant::now());
+        self.store(&mut rec)?;
+        Ok(json!({ "server": server, "cleared_pins": n }))
     }
 
     fn mcp_servers(&self) -> Result<Value, HandlerError> {
@@ -754,6 +909,12 @@ impl Handler for Daemon {
             Method::DeleteAll => Ok(json!(self.db()?.delete_all().map_err(hs)?)),
             Method::ApplyRetention => Ok(json!(self.apply_retention()?)),
             Method::McpServers => self.mcp_servers(),
+            Method::McpTools { server, tools } => {
+                serde_json::to_value(self.mcp_tools(&server, &tools)?).map_err(hs)
+            }
+            Method::McpTrust { server, actor } => {
+                self.mcp_trust(&server, &format!("{actor} via {client}"))
+            }
             Method::Export { format, query } => self.export(&format, &query),
             Method::Report { kind, window_hours } => self.report(&kind, window_hours),
             Method::Subscribe { .. } => Err(HandlerError::bad_request(

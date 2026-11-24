@@ -13,9 +13,11 @@
 //! stored separately and is lowered when the command contains constructs that can only be
 //! resolved at runtime (variables, substitutions, inline interpreter code).
 
+mod mcp;
 mod shell;
 mod url;
 
+pub use mcp::tool_definition_findings;
 pub use url::{UrlAssessment, assess_url, extract_urls};
 
 use agentshield_command_parser::{ParsedCommand, guess_shell, parse};

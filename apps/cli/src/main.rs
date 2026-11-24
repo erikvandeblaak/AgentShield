@@ -5,6 +5,7 @@
 
 mod daemon_ctl;
 mod hook;
+mod mcp_proxy;
 
 use agentshield_adapter_claude_code as claude;
 use agentshield_audit_log::{EventQuery, EventRow};
@@ -100,6 +101,9 @@ enum Cmd {
     },
     /// Run an end-to-end self test through the real hook binary (no agent needed).
     Selftest,
+    /// MCP servers: list, route through the AgentShield proxy, trust changed tool definitions.
+    #[command(subcommand)]
+    Mcp(McpCmd),
     /// Daemon control.
     #[command(subcommand)]
     Daemon(DaemonCmd),
@@ -242,6 +246,44 @@ enum ReportCmd {
         kind: String,
         #[arg(long, default_value_t = 24)]
         hours: u32,
+    },
+}
+
+#[derive(Subcommand)]
+enum McpCmd {
+    /// List configured MCP servers (Claude Code config) and whether they are routed via AgentShield.
+    List,
+    /// Stdio proxy used in MCP configs: `agentshield mcp proxy --name <server> -- <command> [args...]`.
+    Proxy {
+        #[arg(long)]
+        name: String,
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
+    /// Route stdio MCP servers through the proxy (all servers if none given). Backs up first.
+    Wrap {
+        servers: Vec<String>,
+        /// Config file (default: ~/.claude.json). Use a project's .mcp.json for project scope.
+        #[arg(long)]
+        config: Option<std::path::PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Restore the original server commands.
+    Unwrap {
+        servers: Vec<String>,
+        #[arg(long)]
+        config: Option<std::path::PathBuf>,
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Accept a server's current tool definitions after reviewing a change.
+    Trust {
+        server: String,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -951,6 +993,7 @@ fn run(ctx: &Ctx, cmd: Cmd) -> anyhow::Result<i32> {
             Err(e) => Ok(daemon_err(ctx, e)),
         },
         Cmd::Selftest => selftest(ctx),
+        Cmd::Mcp(m) => mcp_cmd(ctx, m),
     }
 }
 
@@ -1004,6 +1047,150 @@ fn watch(ctx: &Ctx, min_score: u8) -> anyhow::Result<i32> {
                 )
             ),
             agentshield_ipc::Push::Heartbeat => {}
+        }
+    }
+}
+
+fn claude_json() -> std::path::PathBuf {
+    if let Some(d) = std::env::var_os("CLAUDE_CONFIG_DIR").filter(|v| !v.is_empty()) {
+        let p = std::path::PathBuf::from(d).join(".claude.json");
+        if p.is_file() {
+            return p;
+        }
+    }
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_default()
+        .join(".claude.json")
+}
+
+fn mcp_cmd(ctx: &Ctx, m: McpCmd) -> anyhow::Result<i32> {
+    match m {
+        McpCmd::Proxy { name, command } => Ok(mcp_proxy::run(&name, &command)),
+        McpCmd::List => {
+            let v = match ctx.call(Method::McpServers) {
+                Ok(v) => v,
+                Err(e) => return Ok(daemon_err(ctx, e)),
+            };
+            ctx.out(&v, || {
+                v.as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|s| {
+                        format!(
+                            "{:<20} {:<8} {:<26} {}  {} finding(s)",
+                            s["name"].as_str().unwrap_or(""),
+                            s["transport"].as_str().unwrap_or(""),
+                            if s["routed_via_agentshield"].as_bool() == Some(true) {
+                                ctx.c("32", "routed via AgentShield")
+                            } else {
+                                ctx.c("33", "direct (not proxied)")
+                            },
+                            s["scope"].as_str().unwrap_or(""),
+                            s["findings"].as_array().map(|f| f.len()).unwrap_or(0)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            });
+            Ok(0)
+        }
+        McpCmd::Wrap {
+            servers,
+            config,
+            dry_run,
+            yes,
+        } => {
+            let file = config.unwrap_or_else(claude_json);
+            let bin = hook_binary();
+            let preview =
+                claude::mcp_wrap::wrap(&file, &servers, &bin, &ctx.paths.backups_dir(), true);
+            if !preview.ok {
+                eprintln!("{}", preview.message);
+                return Ok(EXIT_ERR);
+            }
+            if dry_run || preview.changed.is_empty() {
+                ctx.out(&serde_json::to_value(&preview)?, || {
+                    let mut s = format!(
+                        "{}: would route {:?} through the proxy (dry run)",
+                        file.display(),
+                        preview.changed
+                    );
+                    for (n, why) in &preview.skipped {
+                        s.push_str(&format!("\n  skip {n}: {why}"));
+                    }
+                    s
+                });
+                return Ok(0);
+            }
+            if !confirm(
+                ctx,
+                yes,
+                &format!(
+                    "Route {:?} in {} through the AgentShield MCP proxy? Close Claude Code first: it rewrites this file while running.",
+                    preview.changed,
+                    file.display()
+                ),
+            ) {
+                return Ok(EXIT_ABORT);
+            }
+            let r = claude::mcp_wrap::wrap(&file, &servers, &bin, &ctx.paths.backups_dir(), false);
+            ctx.out(&serde_json::to_value(&r)?, || {
+                format!(
+                    "{} {}{}",
+                    if r.ok { "✔" } else { "✘" },
+                    r.message,
+                    r.backup_path
+                        .as_ref()
+                        .map(|b| format!("\n  backup: {b}"))
+                        .unwrap_or_default()
+                )
+            });
+            Ok(if r.ok { 0 } else { EXIT_ERR })
+        }
+        McpCmd::Unwrap {
+            servers,
+            config,
+            yes,
+        } => {
+            let file = config.unwrap_or_else(claude_json);
+            if !confirm(
+                ctx,
+                yes,
+                &format!(
+                    "Restore the original MCP server commands in {}?",
+                    file.display()
+                ),
+            ) {
+                return Ok(EXIT_ABORT);
+            }
+            let r = claude::mcp_wrap::unwrap(&file, &servers, &ctx.paths.backups_dir());
+            ctx.out(&serde_json::to_value(&r)?, || {
+                format!("{} {}", if r.ok { "✔" } else { "✘" }, r.message)
+            });
+            Ok(if r.ok { 0 } else { EXIT_ERR })
+        }
+        McpCmd::Trust { server, yes } => {
+            if !confirm(
+                ctx,
+                yes,
+                &format!(
+                    "Accept the current tool definitions of MCP server '{server}'? Only do this after reviewing the change."
+                ),
+            ) {
+                return Ok(EXIT_ABORT);
+            }
+            match ctx.call(Method::McpTrust {
+                server,
+                actor: "cli".into(),
+            }) {
+                Ok(v) => {
+                    ctx.out(&v, || format!("Cleared {} pinned tool definition(s); they are re-pinned on the next tools/list.", v["cleared_pins"]));
+                    Ok(0)
+                }
+                Err(e) => Ok(daemon_err(ctx, e)),
+            }
         }
     }
 }

@@ -19,6 +19,7 @@
 pub mod detect;
 pub mod install;
 pub mod mcp;
+pub mod mcp_wrap;
 
 use agentshield_command_parser::guess_shell;
 use agentshield_event_model::{

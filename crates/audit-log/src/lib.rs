@@ -778,6 +778,23 @@ impl AuditLog {
         Ok(())
     }
 
+    /// All meta entries whose key starts with `prefix`.
+    pub fn meta_with_prefix(&self, prefix: &str) -> Result<Vec<(String, String)>> {
+        let mut st = self.conn.prepare(
+            "SELECT key, value FROM meta WHERE substr(key, 1, length(?1)) = ?1 ORDER BY key",
+        )?;
+        let rows = st.query_map([prefix], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    /// Delete meta entries whose key starts with `prefix`; returns how many.
+    pub fn meta_delete_prefix(&self, prefix: &str) -> Result<u64> {
+        Ok(self.conn.execute(
+            "DELETE FROM meta WHERE substr(key, 1, length(?1)) = ?1",
+            [prefix],
+        )? as u64)
+    }
+
     /// Record events that could not be stored (never hidden).
     pub fn add_dropped(&self, n: u64) -> Result<()> {
         self.conn.execute(
