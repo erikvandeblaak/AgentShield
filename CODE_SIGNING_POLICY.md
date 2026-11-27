@@ -18,7 +18,8 @@ Only files built from this repository by the GitHub Actions workflow
 | `ErikAgentShield_<version>_x64_en-US.msi` | MSI installer |
 
 Upstream components that are bundled unchanged (such as the NSIS and WiX helper libraries added by the
-Tauri bundler) are not signed with this certificate. Linux packages are not code-signed.
+Tauri bundler) are not signed with this certificate. The same goes for `uninstall.exe`, which NSIS generates
+inside the signed setup program and writes to the install folder. Linux packages are not code-signed.
 
 Every signing request is checked by SignPath against the GitHub build that produced it (origin
 verification) and must be approved manually for each release. The SignPath artifact configurations
@@ -28,8 +29,8 @@ are kept in [`packaging/signpath/`](packaging/signpath/).
 
 | Role | Member |
 |---|---|
-| Committer and reviewer | [Erik van de Blaak](https://github.com/erikvandeblaak) |
-| Approver (signing requests) | [Erik van de Blaak](https://github.com/erikvandeblaak) |
+| Committers and reviewers | [Erik van de Blaak](https://github.com/erikvandeblaak) |
+| Approvers (signing requests) | [Erik van de Blaak](https://github.com/erikvandeblaak) |
 
 Contributions from people outside the team arrive as pull requests and are reviewed before merge.
 Every team member must use multi-factor authentication for GitHub and SignPath.
@@ -43,6 +44,10 @@ AgentShield works locally: no account, no cloud, no telemetry. The only network 
 optional command `agentshield osv update`, which the user starts to download the public
 [OSV](https://osv.dev) vulnerability data from `osv-vulnerabilities.storage.googleapis.com`. That
 download sends no data about the user, the machine or its projects.
+
+Installer: if the Microsoft Edge WebView2 runtime is missing (it is part of Windows 11), the setup.exe and
+the MSI download Microsoft's WebView2 bootstrapper from `go.microsoft.com` and run it, which installs the
+runtime from Microsoft; the installer sends no data about the user or the machine.
 
 ## Verifying a download
 
