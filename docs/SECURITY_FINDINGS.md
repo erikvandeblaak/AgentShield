@@ -26,6 +26,10 @@ fail-open, so this would have **silently disabled monitoring**. Mitigation: hook
 from `%LOCALAPPDATA%\AgentShield\bin` (45–64 ms, same SHA-256). `selftest` still reported success at
 26 757 ms (open: fail on latency near the timeout). A signing pipeline (SignPath) is prepared, see
 `CODE_SIGNING_POLICY.md`; whether signing removes the Norton delay is not yet measured.
+**Update 2026-11-27 (later):** a fresh build was delayed in *every* folder, also under `%LOCALAPPDATA%`
+(`agentshield.exe hook --help` 25.9 s, `--version` 0.85 s), while the installed 0.1.0 started in 59 ms.
+So the folder is not the deciding factor; most likely Norton trusts the binary it has seen before and
+delays new, unknown binaries when started with `hook`. `selftest` now fails above 5 s.
 
 ## SF-004 — Daemon spawned from the hook inherited Claude Code's stdout pipe (fixed)
 On Windows every inheritable handle is inherited by child processes. When the hook auto-started the

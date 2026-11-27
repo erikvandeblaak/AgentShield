@@ -52,7 +52,9 @@ safer alternative. Nothing is downloaded unless you run the command.
 ## Honest coverage
 
 AgentShield sees what Claude Code's hooks expose. It does **not** see what child processes do beyond
-their command line, does not capture network traffic, and does not sandbox. The
+their command line, does not capture network traffic, and does not sandbox. Shell commands that a skill
+runs while it loads are covered through `PreSkillShellCommand` from Claude Code 2.1.332 on (there, *ask*
+becomes *deny*: Claude Code cannot ask about them). The
 [capability matrix](docs/AGENT_CAPABILITY_MATRIX.md) shows exactly what is enforced, observed, partial or
 unsupported — in the app too. Other agents (Codex, Cursor, …) are detected but **not monitored**.
 

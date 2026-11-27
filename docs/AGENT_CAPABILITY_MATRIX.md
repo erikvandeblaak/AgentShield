@@ -15,9 +15,9 @@ Version 0.1.0, 2026-11-24. This document mirrors `crates/adapters/claude-code/sr
 
 Rule from the source: *"A capability is only 'enforced' when there is a documented pre-execution deny path that AgentShield uses and the hooks are installed & verified."*
 
-## 2. Claude Code (tested against 2.1.331)
+## 2. Claude Code (tested against 2.1.332)
 
-Integration: hooks in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`), exec form, for PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, UserPromptSubmit, SessionStart, SessionEnd, Notification, Stop, SubagentStop, ConfigChange (tamper tripwire, observation only). `disableAllHooks: true` in the settings file is reported as an integration problem.
+Integration: hooks in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`), exec form, for PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, UserPromptSubmit, SessionStart, SessionEnd, Notification, Stop, SubagentStop, ConfigChange (tamper tripwire, observation only), and PreSkillShellCommand (matcher `Bash|PowerShell`) when the `claude` on PATH is 2.1.332 or later: older versions show a warning for an unknown hook event at every start, so it is not registered there (`agent install --skill-shell-hook on|off` overrides). `disableAllHooks: true` in the settings file is reported as an integration problem.
 
 State inputs: `installed`, `verified`, and whether `PreToolUse`, `PostToolUse`, `SessionStart` are registered.
 
@@ -27,6 +27,7 @@ State inputs: `installed`, `verified`, and whether `PreToolUse`, `PostToolUse`, 
 |---|---|---|
 | Shell monitoring | observed | Bash/PowerShell tool calls via PreToolUse + PostToolUse |
 | Shell blocking | enforced | PreToolUse hook can return deny/ask before the tool runs (Enforce/Interactive/Lockdown modes) |
+| Skill shell commands | enforced | Commands a skill or command injects while loading, via PreSkillShellCommand (Claude Code 2.1.332+); ask counts as deny there |
 | File read monitoring | observed | Read/Glob/Grep tool calls (not reads done inside shell commands' child processes beyond what the command line shows) |
 | File write monitoring | observed | Write/Edit/MultiEdit/NotebookEdit tool calls |
 | File blocking | enforced | PreToolUse hook can return deny/ask before the tool runs (Enforce/Interactive/Lockdown modes) |
@@ -47,6 +48,7 @@ State inputs: `installed`, `verified`, and whether `PreToolUse`, `PostToolUse`, 
 | Shell / File / MCP **blocking / enforcement** | unsupported — "AgentShield hooks are not installed in Claude Code" | degraded — "Hooks installed but not verified (see integration problems)" (when not verified or PreToolUse missing) |
 | Shell monitoring, File read/write monitoring, MCP observation | unsupported — same reason | degraded — "Required hook event is not registered" (when PreToolUse missing) |
 | Session correlation | unsupported | degraded — "Required hook event is not registered" (when SessionStart missing) |
+| Skill shell commands | unsupported | unsupported — "PreSkillShellCommand not registered (needs Claude Code 2.1.332+ and a repair): PreToolUse does not fire for commands a skill injects while loading" |
 | Package detection, Network metadata | unsupported | partial (unchanged while installed) |
 | Network enforcement | unsupported (reason text unchanged) | partial |
 | Process monitoring, Sandbox integration | unsupported | unsupported |

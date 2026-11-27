@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Claude Code `PreSkillShellCommand` (2.1.332+): shell commands that a skill or command injects while it
+  loads are now analysed and, in the enforcing modes, denied before they run; PreToolUse never sees
+  them. Registered only when the `claude` on PATH is 2.1.332 or later (older versions warn about an
+  unknown hook event at every start); `agent install --skill-shell-hook auto|on|off`. Claude Code
+  treats *ask* as *deny* there, so AgentShield records and sends *deny* with that explanation.
+  `doctor`, `security check` and the capability matrix report the gap when Claude Code supports the
+  event but it is not registered, and the warning case the other way round.
+- `selftest` now fails (exit 4) when the hook takes 5 s or longer, half of the 10 s hook timeout:
+  Claude Code runs the action without AgentShield's decision when the hook times out. Previously it
+  reported success at 26–54 s (SF-003).
 - Release pipeline for code signing via SignPath (free OSS signing, SignPath Foundation):
   `.github/workflows/release.yml` + `scripts/release-windows.ps1` sign the binaries first and build the
   installers from exactly those files (the desktop binary is pre-patched per installer type, because the

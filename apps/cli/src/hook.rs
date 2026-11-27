@@ -7,7 +7,7 @@
 //! 2. Otherwise evaluate locally with the same engine (marked degraded, stored directly in
 //!    the audit DB) and try to start the daemon in the background for next time.
 //! 3. If AgentShield itself fails (panic), fail-open in Monitor/Shadow/Interactive and
-//!    fail-closed (deny) for PreToolUse in Enforce/Lockdown.
+//!    fail-closed (deny) for PreToolUse / PreSkillShellCommand in Enforce/Lockdown.
 
 use agentshield_adapter_claude_code as claude;
 use agentshield_core::{Config, Engine, Paths};
@@ -130,15 +130,15 @@ fn fail_closed_reply(
     hint: Option<&str>,
     what: &str,
 ) -> HookReply {
-    let is_pre = payload
+    let event = payload
         .and_then(|p| p.get("hook_event_name"))
         .and_then(|v| v.as_str())
         .or(hint)
-        == Some("PreToolUse");
+        .unwrap_or("");
     match configured_mode(paths) {
-        Mode::Enforce | Mode::Lockdown if is_pre => {
+        Mode::Enforce | Mode::Lockdown if claude::is_pre_event(event) => {
             let out = claude::render(
-                "PreToolUse",
+                event,
                 &agentshield_policy_engine::ModeOutcome {
                     actual: ActualDecision::Deny,
                     message: Some(format!(

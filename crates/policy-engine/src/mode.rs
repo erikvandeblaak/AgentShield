@@ -5,6 +5,9 @@
 //! * Monitor and Shadow never return Ask or Deny.
 //! * No mode ever returns an explicit allow (AgentShield cannot weaken native permissions).
 //! * Non-enforceable events (post-execution, lifecycle) are always NotApplicable.
+//! * On hook events where the agent cannot ask the user (Claude Code `PreSkillShellCommand`
+//!   treats `ask` as `deny`), Ask is recorded and sent as Deny, so the audit log says what
+//!   really happens.
 
 use crate::PolicyOutcome;
 use agentshield_event_model::{
@@ -36,8 +39,33 @@ fn message(prefix: &str, outcome: &PolicyOutcome, risk: &RiskAssessment) -> Stri
     m
 }
 
+/// Native hook events on which an `ask` answer is treated as `deny` by the agent.
+const NO_ASK_HOOK_EVENTS: &[&str] = &["PreSkillShellCommand"];
+
 /// Decide what to tell the agent.
 pub fn apply_mode(
+    mode: Mode,
+    outcome: &PolicyOutcome,
+    ev: &NormalizedEvent,
+    risk: &RiskAssessment,
+) -> ModeOutcome {
+    let mo = decide(mode, outcome, ev, risk);
+    if mo.actual == ActualDecision::Ask && NO_ASK_HOOK_EVENTS.contains(&ev.ctx.hook_event.as_str())
+    {
+        return ModeOutcome {
+            actual: ActualDecision::Deny,
+            message: mo.message.map(|m| {
+                format!(
+                    "{}. Claude Code cannot ask about shell commands that a skill runs while loading, so this is denied.",
+                    m.replacen("asks for approval", "blocked (would ask for approval)", 1)
+                )
+            }),
+        };
+    }
+    mo
+}
+
+fn decide(
     mode: Mode,
     outcome: &PolicyOutcome,
     ev: &NormalizedEvent,

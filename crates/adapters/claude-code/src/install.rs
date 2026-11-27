@@ -30,10 +30,43 @@ pub const EVENTS: &[(&str, Option<&str>)] = &[
     ("ConfigChange", None),
 ];
 
+/// Registered in addition to [`EVENTS`] when Claude Code is new enough: shell commands that a
+/// skill or command injects while it loads (PreToolUse does not fire for those).
+pub const SKILL_SHELL_EVENT: (&str, Option<&str>) =
+    (crate::SKILL_SHELL_EVENT, Some("Bash|PowerShell"));
+/// First Claude Code version that knows `PreSkillShellCommand`. Older versions show a warning
+/// dialog for an unknown hook event at every interactive start, so it is not registered there.
+pub const SKILL_SHELL_MIN_VERSION: (u64, u64, u64) = (2, 1, 332);
+
+/// Parse a Claude Code version string such as `2.1.332 (Claude Code)`.
+pub fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
+    let first = v.split_whitespace().next()?;
+    let mut it = first.trim_start_matches('v').split('.');
+    let n = |x: Option<&str>| x.and_then(|p| p.parse::<u64>().ok());
+    Some((n(it.next())?, n(it.next())?, n(it.next())?))
+}
+
+/// Whether this Claude Code version supports the `PreSkillShellCommand` hook.
+/// Unknown version: `false` (better a documented gap than a warning on every start).
+pub fn supports_skill_shell(claude_version: Option<&str>) -> bool {
+    claude_version
+        .and_then(parse_version)
+        .is_some_and(|v| v >= SKILL_SHELL_MIN_VERSION)
+}
+
+/// The events to register.
+pub fn events(skill_shell: bool) -> Vec<(&'static str, Option<&'static str>)> {
+    let mut e = EVENTS.to_vec();
+    if skill_shell {
+        e.push(SKILL_SHELL_EVENT);
+    }
+    e
+}
+
 /// Timeout (seconds) per event. PreToolUse must stay short: a slow hook delays the agent.
 fn timeout_for(event: &str) -> u64 {
     match event {
-        "PreToolUse" | "PermissionRequest" => 10,
+        "PreToolUse" | "PreSkillShellCommand" | "PermissionRequest" => 10,
         "SessionEnd" => 5,
         _ => 10,
     }
@@ -127,7 +160,7 @@ fn handler(binary: &Path, event: &str, fail_closed: bool) -> Value {
         "args": HOOK_ARGS,
         "timeout": timeout_for(event),
     });
-    if fail_closed && event == "PreToolUse" {
+    if fail_closed && crate::is_pre_event(event) {
         h["onFailure"] = json!("block");
     }
     h
@@ -224,7 +257,12 @@ pub fn strip_for(settings: &Value, only: Option<&Path>) -> (Value, usize) {
 }
 
 /// Compute the settings with AgentShield installed (idempotent).
-pub fn apply(settings: &Value, binary: &Path, fail_closed: bool) -> Result<Value, String> {
+pub fn apply(
+    settings: &Value,
+    binary: &Path,
+    fail_closed: bool,
+    skill_shell: bool,
+) -> Result<Value, String> {
     let (mut out, _) = strip(settings);
     let obj = out.as_object_mut().ok_or("settings is not an object")?;
     let hooks = obj
@@ -233,7 +271,7 @@ pub fn apply(settings: &Value, binary: &Path, fail_closed: bool) -> Result<Value
     let hooks = hooks
         .as_object_mut()
         .ok_or("settings.hooks is not an object; refusing to modify it")?;
-    for (event, matcher) in EVENTS {
+    for (event, matcher) in events(skill_shell) {
         let groups = hooks
             .entry(event.to_string())
             .or_insert_with(|| Value::Array(vec![]));
@@ -276,9 +314,12 @@ pub fn state(path: &Path) -> IntegrationState {
         st.problems.push("disableAllHooks is true in this settings file: Claude Code runs NO hooks, nothing is monitored".into());
     }
     let hooks = v.get("hooks").and_then(|h| h.as_object());
-    for (event, _) in EVENTS {
+    // PreSkillShellCommand is optional (depends on the Claude Code version): checked when
+    // present, never reported as missing here (see detect.rs for the version-aware check).
+    let skill_present = hooks.is_some_and(|h| h.contains_key(SKILL_SHELL_EVENT.0));
+    for (event, _) in events(skill_present) {
         let ours: Vec<&Value> = hooks
-            .and_then(|h| h.get(*event))
+            .and_then(|h| h.get(event))
             .and_then(|g| g.as_array())
             .map(|groups| {
                 groups
@@ -290,7 +331,9 @@ pub fn state(path: &Path) -> IntegrationState {
             })
             .unwrap_or_default();
         if ours.is_empty() {
-            st.missing_events.push(event.to_string());
+            if event != SKILL_SHELL_EVENT.0 {
+                st.missing_events.push(event.to_string());
+            }
         } else {
             st.events.push(event.to_string());
             if ours.len() > 1 {
@@ -300,7 +343,7 @@ pub fn state(path: &Path) -> IntegrationState {
                 ));
             }
             for h in ours {
-                if *event == "PreToolUse"
+                if event == "PreToolUse"
                     && h.get("onFailure").and_then(|x| x.as_str()) == Some("block")
                 {
                     st.fail_closed = true;
@@ -331,10 +374,11 @@ pub fn plan(
     path: &Path,
     binary: &Path,
     fail_closed: bool,
+    skill_shell: bool,
     backup_dir: &Path,
 ) -> Result<InstallPlan, String> {
     let current = read_settings(path)?;
-    let next = apply(&current, binary, fail_closed)?;
+    let next = apply(&current, binary, fail_closed, skill_shell)?;
     let already = current == next;
     let mut changes = Vec::new();
     if already {
@@ -351,18 +395,27 @@ pub fn plan(
                 if removed == 1 { "y" } else { "ies" }
             ));
         }
-        for (event, matcher) in EVENTS {
+        for (event, matcher) in events(skill_shell) {
             changes.push(format!(
                 "Add hook {event}{}: {} hook{}",
                 matcher
                     .map(|m| format!(" (matcher \"{m}\")"))
                     .unwrap_or_default(),
                 binary.display(),
-                if fail_closed && *event == "PreToolUse" {
+                if fail_closed && crate::is_pre_event(event) {
                     " [onFailure: block — fail-closed]"
                 } else {
                     ""
                 }
+            ));
+        }
+        if !skill_shell {
+            changes.push(format!(
+                "Skip {}: needs Claude Code {}.{}.{} or later (older versions warn about an unknown hook event at every start)",
+                SKILL_SHELL_EVENT.0,
+                SKILL_SHELL_MIN_VERSION.0,
+                SKILL_SHELL_MIN_VERSION.1,
+                SKILL_SHELL_MIN_VERSION.2
             ));
         }
         let other = current
@@ -414,13 +467,19 @@ fn write(path: &Path, v: &Value) -> Result<(), String> {
 }
 
 /// Install (or repair). Never call without explicit user consent.
-pub fn install(path: &Path, binary: &Path, fail_closed: bool, backup_dir: &Path) -> InstallResult {
+pub fn install(
+    path: &Path,
+    binary: &Path,
+    fail_closed: bool,
+    skill_shell: bool,
+    backup_dir: &Path,
+) -> InstallResult {
     let run = || -> Result<InstallResult, String> {
         if !binary.is_file() {
             return Err(format!("hook binary {} does not exist", binary.display()));
         }
         let current = read_settings(path)?;
-        let next = apply(&current, binary, fail_closed)?;
+        let next = apply(&current, binary, fail_closed, skill_shell)?;
         if current == next {
             let st = state(path);
             return Ok(InstallResult {
@@ -449,7 +508,10 @@ pub fn install(path: &Path, binary: &Path, fail_closed: bool, backup_dir: &Path)
         }
         Ok(InstallResult {
             ok: true,
-            message: format!("Installed AgentShield hooks for {} events.", EVENTS.len()),
+            message: format!(
+                "Installed AgentShield hooks for {} events.",
+                events(skill_shell).len()
+            ),
             backup_path: b.map(|p| p.display().to_string()),
             verified: true,
             problems: vec![],

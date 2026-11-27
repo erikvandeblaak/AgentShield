@@ -1,7 +1,8 @@
 //! Claude Code adapter.
 //!
 //! Based on the official hooks reference (https://code.claude.com/docs/en/hooks, read
-//! 2026-11-24, Claude Code 2.1.331). Facts this adapter relies on:
+//! 2026-11-24, Claude Code 2.1.331; PreSkillShellCommand re-read 2026-11-27, 2.1.332). Facts this
+//! adapter relies on:
 //!
 //! * Hooks receive one JSON object on stdin with `session_id`, `cwd`, `hook_event_name`,
 //!   `permission_mode`, and per event `tool_name`, `tool_input`, `tool_use_id`,
@@ -15,6 +16,11 @@
 //!   (fail-open) unless the handler sets `"onFailure": "block"` (Claude Code >= 2.1.295).
 //! * Exec form (`command` + `args`) runs without a shell, which avoids the Windows Git-Bash
 //!   dependency of shell-form hooks.
+//! * `PreSkillShellCommand` (Claude Code >= 2.1.332) runs before a shell command that a skill or
+//!   command injects while it loads (`` !`cmd` `` or a ```` ```! ```` block); `PreToolUse` does
+//!   not fire for those. Its input has `tool_name` (`Bash`/`PowerShell`), `tool_input.command`,
+//!   `tool_use_id`, `command_name`, `command_source` and `invoked_by`; its output uses the
+//!   PreToolUse format, where `ask` and `defer` count as `deny`.
 
 pub mod detect;
 pub mod install;
@@ -29,6 +35,13 @@ use agentshield_policy_engine::ModeOutcome;
 use serde_json::Value;
 
 pub const AGENT_ID: &str = "claude-code";
+/// Hook event for shell commands injected by skills/commands while they load.
+pub const SKILL_SHELL_EVENT: &str = "PreSkillShellCommand";
+
+/// Events whose output can deny an action before it runs.
+pub fn is_pre_event(hook_event: &str) -> bool {
+    hook_event == "PreToolUse" || hook_event == SKILL_SHELL_EVENT
+}
 /// Max size of a tool response kept in memory for secret / injection scanning.
 pub const MAX_RESPONSE_SCAN: usize = 256 * 1024;
 
@@ -176,6 +189,30 @@ pub fn normalize(
             enforceable: true,
             ctx: ctx.clone(),
         },
+        SKILL_SHELL_EVENT => {
+            // Same analysis as a Bash/PowerShell tool call; which skill injected it is kept as
+            // small metadata next to the command (no skill file contents).
+            let mut input = input.clone();
+            if let Some(o) = input.as_object_mut() {
+                o.insert(
+                    "skill".into(),
+                    serde_json::json!({
+                        "command_name": payload.get("command_name").and_then(|x| x.as_str()),
+                        "command_source": payload.get("command_source").and_then(|x| x.as_str()),
+                        "invoked_by": payload.get("invoked_by").and_then(|x| x.as_str()),
+                    }),
+                );
+            }
+            NormalizedEvent {
+                phase: Phase::Pre,
+                action: tool_action(tool.as_deref().unwrap_or("Bash")),
+                input,
+                post_failed: None,
+                response_text: None,
+                enforceable: true,
+                ctx: ctx.clone(),
+            }
+        }
         "PostToolUse" | "PostToolUseFailure" => {
             let failed = hook_event == "PostToolUseFailure"
                 || payload
@@ -316,9 +353,9 @@ pub struct HookOutput {
 }
 
 /// Render the decision for Claude Code. Only `deny` and `ask` are ever emitted, and only for
-/// `PreToolUse`. Everything else produces no output and exit code 0.
+/// `PreToolUse` and `PreSkillShellCommand`. Everything else produces no output and exit code 0.
 pub fn render(hook_event: &str, outcome: &ModeOutcome) -> HookOutput {
-    if hook_event != "PreToolUse" {
+    if !is_pre_event(hook_event) {
         return HookOutput::default();
     }
     let decision = match outcome.actual {
@@ -333,7 +370,7 @@ pub fn render(hook_event: &str, outcome: &ModeOutcome) -> HookOutput {
     let reason = cap(reason, 9_000); // Claude Code caps JSON string fields at 10,000 chars
     let json = serde_json::json!({
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
+            "hookEventName": hook_event,
             "permissionDecision": decision,
             "permissionDecisionReason": reason,
         }

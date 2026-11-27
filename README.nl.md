@@ -24,7 +24,9 @@ strenger maken, nooit zwakker dan de eigen permissie-instellingen.
 ## Eerlijke dekking
 
 AgentShield ziet wat de hooks van Claude Code tonen. Het ziet niet wat child-processen doen buiten hun
-commandline, vangt geen netwerkverkeer af en sandboxt niet. De
+commandline, vangt geen netwerkverkeer af en sandboxt niet. Shell-commando's die een skill tijdens het laden
+uitvoert, vallen eronder via `PreSkillShellCommand` vanaf Claude Code 2.1.332 (daar wordt *ask* *deny*:
+Claude Code kan daar niets vragen). De
 [capability matrix](docs/AGENT_CAPABILITY_MATRIX.md) toont precies wat afgedwongen, geobserveerd,
 gedeeltelijk of niet ondersteund wordt — ook in de app. Andere agents worden gedetecteerd maar **niet gemonitord**.
 

@@ -125,6 +125,7 @@ pub fn claude_capabilities(st: Option<&IntegrationState>) -> Vec<Capability> {
     let pre = st.is_some_and(|s| s.events.iter().any(|e| e == "PreToolUse"));
     let post = st.is_some_and(|s| s.events.iter().any(|e| e == "PostToolUse"));
     let session = st.is_some_and(|s| s.events.iter().any(|e| e == "SessionStart"));
+    let skill = st.is_some_and(|s| s.events.iter().any(|e| e == crate::SKILL_SHELL_EVENT));
     let not_installed = "AgentShield hooks are not installed in Claude Code";
     let enforce_or = |what: &str| -> Capability {
         if !installed {
@@ -159,6 +160,21 @@ pub fn claude_capabilities(st: Option<&IntegrationState>) -> Vec<Capability> {
             "Bash/PowerShell tool calls via PreToolUse + PostToolUse",
         ),
         enforce_or("Shell blocking"),
+        if !installed {
+            cap("Skill shell commands", "unsupported", not_installed)
+        } else if skill && verified {
+            cap(
+                "Skill shell commands",
+                "enforced",
+                "Commands a skill or command injects while loading, via PreSkillShellCommand (Claude Code 2.1.332+); ask counts as deny there",
+            )
+        } else {
+            cap(
+                "Skill shell commands",
+                "unsupported",
+                "PreSkillShellCommand not registered (needs Claude Code 2.1.332+ and a repair): PreToolUse does not fire for commands a skill injects while loading",
+            )
+        },
         observe_or(
             "File read monitoring",
             pre,
@@ -234,12 +250,39 @@ pub fn claude_capabilities(st: Option<&IntegrationState>) -> Vec<Capability> {
     ]
 }
 
+/// Version of the `claude` executable on PATH (None when not found).
+pub fn claude_version() -> Option<String> {
+    which("claude").as_deref().and_then(version_of)
+}
+
+/// Version-aware check of the optional `PreSkillShellCommand` registration.
+pub fn skill_shell_check(st: &mut IntegrationState, claude_version: Option<&str>) {
+    if !st.installed {
+        return;
+    }
+    let event = crate::SKILL_SHELL_EVENT;
+    let registered = st.events.iter().any(|e| e == event);
+    let supported = crate::install::supports_skill_shell(claude_version);
+    if supported && !registered {
+        st.problems.push(format!(
+            "{event} is not registered: shell commands that skills run while loading are not checked; run repair"
+        ));
+    } else if registered && claude_version.is_some() && !supported {
+        st.problems.push(format!(
+            "{event} is registered but Claude Code {} does not know it (warning at every start); update Claude Code or run repair",
+            claude_version.unwrap_or_default()
+        ));
+    }
+    st.verified = st.verified && st.problems.is_empty();
+}
+
 /// Detect Claude Code and list other agents honestly as unsupported.
 pub fn detect_all() -> Vec<AgentInfo> {
     let exe = which("claude");
     let version = exe.as_deref().and_then(version_of);
     let sp = settings_path();
-    let st = state(&sp);
+    let mut st = state(&sp);
+    skill_shell_check(&mut st, version.as_deref());
     let detected = exe.is_some() || sp.parent().is_some_and(|p| p.is_dir());
     let mut notes = vec![
         "Monitoring covers Claude Code CLI and IDE sessions that load ~/.claude/settings.json hooks.".to_string(),

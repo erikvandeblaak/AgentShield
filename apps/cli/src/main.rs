@@ -169,8 +169,19 @@ struct InstallArgs {
     /// Make Claude Code block tool calls when the AgentShield hook fails (onFailure: block).
     #[arg(long)]
     fail_closed: bool,
+    /// Register PreSkillShellCommand (shell commands injected by skills while they load).
+    /// `auto`: only when the `claude` on PATH is 2.1.332 or later.
+    #[arg(long, value_enum, default_value_t = SkillShell::Auto)]
+    skill_shell_hook: SkillShell,
     #[arg(long)]
     yes: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum SkillShell {
+    Auto,
+    On,
+    Off,
 }
 
 #[derive(Subcommand)]
@@ -972,7 +983,11 @@ fn run(ctx: &Ctx, cmd: Cmd) -> anyhow::Result<i32> {
             let cfg = Config::load(&ctx.paths);
             out["config_ok"] = json!(cfg.is_ok());
             failed |= cfg.is_err();
-            let integ = claude::install::state(&claude::install::settings_path());
+            let mut integ = claude::install::state(&claude::install::settings_path());
+            claude::detect::skill_shell_check(
+                &mut integ,
+                claude::detect::claude_version().as_deref(),
+            );
             out["claude_code_integration"] = serde_json::to_value(&integ)?;
             failed |= !integ.verified;
             ctx.out(&out, || {
@@ -1468,7 +1483,14 @@ fn agent_cmd(ctx: &Ctx, a: AgentCmd) -> anyhow::Result<i32> {
         AgentCmd::Install(args) | AgentCmd::Repair(args) => {
             check_agent(&args.agent)?;
             let bin = hook_binary();
-            let plan = claude::install::plan(&sp, &bin, args.fail_closed, &backups)
+            let skill_shell = match args.skill_shell_hook {
+                SkillShell::On => true,
+                SkillShell::Off => false,
+                SkillShell::Auto => claude::install::supports_skill_shell(
+                    claude::detect::claude_version().as_deref(),
+                ),
+            };
+            let plan = claude::install::plan(&sp, &bin, args.fail_closed, skill_shell, &backups)
                 .map_err(anyhow::Error::msg)?;
             if args.dry_run || ctx.json && !args.yes {
                 ctx.out(&serde_json::to_value(&plan)?, || {
@@ -1500,7 +1522,7 @@ fn agent_cmd(ctx: &Ctx, a: AgentCmd) -> anyhow::Result<i32> {
             if !confirm(ctx, args.yes, "Install these hooks?") {
                 return Ok(EXIT_ABORT);
             }
-            let r = claude::install::install(&sp, &bin, args.fail_closed, &backups);
+            let r = claude::install::install(&sp, &bin, args.fail_closed, skill_shell, &backups);
             ctx.out(&serde_json::to_value(&r)?, || {
                 format!(
                     "{} {}{}",
@@ -1705,7 +1727,8 @@ fn doctor(ctx: &Ctx) -> anyhow::Result<i32> {
             .map(|e| format!("{} {}", e.display(), ver.clone().unwrap_or_default()))
             .unwrap_or_else(|| "not found on PATH".into()),
     ));
-    let st = claude::install::state(&claude::install::settings_path());
+    let mut st = claude::install::state(&claude::install::settings_path());
+    claude::detect::skill_shell_check(&mut st, ver.as_deref());
     let bin = hook_binary();
     let same_bin = st
         .binary_path
@@ -1779,6 +1802,11 @@ fn doctor(ctx: &Ctx) -> anyhow::Result<i32> {
 
 /// Run the real hook binary with a synthetic, harmless PreToolUse payload and verify the
 /// event arrives in the audit log. Uses a dedicated session id so it is clearly a test.
+/// Hook latency above which the self test fails: half of the 10 s hook timeout that the
+/// installer registers. Claude Code skips a timed-out hook silently (fail-open), so a hook that
+/// is this slow is one antivirus hiccup away from not protecting at all (SF-003).
+const SELFTEST_LATENCY_LIMIT_MS: u128 = 5_000;
+
 fn selftest(ctx: &Ctx) -> anyhow::Result<i32> {
     let exe = hook_binary();
     let sid = format!(
@@ -1825,14 +1853,26 @@ fn selftest(ctx: &Ctx) -> anyhow::Result<i32> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    let ok = out.status.code() == Some(0) && found.is_some() && !stdout.contains("\"allow\"");
+    let path_ok = out.status.code() == Some(0) && found.is_some() && !stdout.contains("\"allow\"");
+    let latency_ok = ms < SELFTEST_LATENCY_LIMIT_MS;
+    let ok = path_ok && latency_ok;
+    let message = if !path_ok {
+        "Self test failed".to_string()
+    } else if !latency_ok {
+        format!(
+            "Hook works but took {ms} ms (limit {SELFTEST_LATENCY_LIMIT_MS} ms). Claude Code waits at most 10 s and then runs the action WITHOUT AgentShield's decision. Antivirus scanning of an unsigned binary is the usual cause: run AgentShield from its install folder or exclude it in your antivirus (docs/SECURITY_FINDINGS.md SF-003)."
+        )
+    } else {
+        "Hook → engine → audit log path works".to_string()
+    };
     let v = json!({
-        "ok": ok, "latency_ms": ms, "exit_code": out.status.code(), "stdout": stdout,
+        "ok": ok, "latency_ms": ms, "latency_limit_ms": SELFTEST_LATENCY_LIMIT_MS, "latency_ok": latency_ok,
+        "exit_code": out.status.code(), "stdout": stdout,
         "event_id": found.as_ref().map(|r| r.record.id), "via_daemon": found.as_ref().map(|r| r.record.via_daemon),
-        "decision": found.as_ref().map(|r| r.record.actual_decision), "message": if ok { "Hook → engine → audit log path works" } else { "Self test failed" },
+        "decision": found.as_ref().map(|r| r.record.actual_decision), "message": message,
     });
     ctx.out(&v, || {
-        format!(
+        let line = format!(
             "{} self test: hook exit {:?}, {} ms, event #{} ({}), decision {}",
             if ok {
                 ctx.c("32", "✔")
@@ -1851,7 +1891,16 @@ fn selftest(ctx: &Ctx) -> anyhow::Result<i32> {
                 .as_ref()
                 .map(|r| r.record.actual_decision.as_str())
                 .unwrap_or("-")
-        )
+        );
+        if path_ok && !latency_ok {
+            format!(
+                "{line}
+  {}",
+                ctx.c("1;33", &message)
+            )
+        } else {
+            line
+        }
     });
     Ok(if ok { 0 } else { EXIT_CHECK })
 }

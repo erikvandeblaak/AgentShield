@@ -262,6 +262,7 @@ pub fn agent_install_preview(s: State<AppState>, agent_id: String, fail_closed: 
         &claude::install::settings_path(),
         &bin,
         fail_closed,
+        claude::install::supports_skill_shell(claude::detect::claude_version().as_deref()),
         &s.paths.backups_dir(),
     )?;
     serde_json::to_value(plan).map_err(|e| e.to_string())
@@ -275,6 +276,7 @@ pub fn agent_install(s: State<AppState>, agent_id: String, fail_closed: bool) ->
         &claude::install::settings_path(),
         &bin,
         fail_closed,
+        claude::install::supports_skill_shell(claude::detect::claude_version().as_deref()),
         &s.paths.backups_dir(),
     );
     if r.ok {
