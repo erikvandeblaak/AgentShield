@@ -5,6 +5,11 @@ all-features = false
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # chrono is unmaintained (no known vulnerability). It is used for timestamps in the event model,
+    # audit log and IPC (serde formats); replacing it with jiff/time is tracked in docs/TECHNICAL_DEBT.md.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained, no vulnerability; migration tracked in TECHNICAL_DEBT.md" },
+]
 
 [licenses]
 version = 2

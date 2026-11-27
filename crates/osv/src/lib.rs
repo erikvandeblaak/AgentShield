@@ -317,7 +317,8 @@ impl OsvDb {
                 let mut entry = archive
                     .by_index(i)
                     .map_err(|e| OsvError::Zip(e.to_string()))?;
-                if !entry.name().ends_with(".json") || entry.size() > 32 * 1024 * 1024 {
+                let is_json = entry.name().is_ok_and(|n| n.ends_with(".json"));
+                if !is_json || entry.size() > 32 * 1024 * 1024 {
                     continue;
                 }
                 buf.clear();

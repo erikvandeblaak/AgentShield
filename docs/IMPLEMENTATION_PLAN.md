@@ -40,7 +40,7 @@ Test evidence reported by the owner for this state: 139 Rust tests passing on Wi
 
 | Deliverable | Status | Evidence |
 |---|---|---|
-| Cargo workspace (13 members, edition 2024, MSRV 1.88, `unsafe_code = "deny"`, clippy warn, thin-LTO release) | done | `Cargo.toml` |
+| Cargo workspace (13 members, edition 2024, MSRV 1.89, `unsafe_code = "deny"`, clippy warn, thin-LTO release) | done | `Cargo.toml` |
 | Normalised event model (actions, phases, findings, 18 risk categories, decisions, coverage, modes) | done | `crates/event-model` |
 | SQLite audit log: WAL, forward-only migrations, indexes, queries/filters, stats, sessions, incidents | done | `crates/audit-log` (+ tests) |
 | Hash chain, verification, explicit `chain_breaks` for deletions, retention, per-session delete, backup | done | `crates/audit-log` |

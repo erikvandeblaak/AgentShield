@@ -24,8 +24,9 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Erik van de Blaak"]
 license = "Apache-2.0"
+publish = false
 homepage = "https://www.vandeblaak.com"
-rust-version = "1.88"
+rust-version = "1.89"
 
 [workspace.dependencies]
 agentshield-event-model = { path = "crates/event-model" }
@@ -51,7 +52,7 @@ sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"
 base64 = "0.22"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 getrandom = "0.3"

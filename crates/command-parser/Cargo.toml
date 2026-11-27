@@ -4,6 +4,7 @@ description = "Static, non-executing shell command analysis for Bash/POSIX, Powe
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 

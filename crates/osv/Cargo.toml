@@ -4,6 +4,7 @@ description = "Offline OSV vulnerability / malicious-package database for AgentS
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
@@ -15,7 +16,7 @@ serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tempfile.workspace = true
