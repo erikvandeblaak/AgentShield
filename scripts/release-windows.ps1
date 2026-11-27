@@ -127,7 +127,8 @@ switch ($Step) {
         $sums = Get-ChildItem $OutDir -File | Sort-Object Name | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
         }
-        $sums | Set-Content -Encoding utf8NoBOM "$OutDir/SHA256SUMS.txt"
+        # LF line endings, so `sha256sum -c SHA256SUMS.txt` also works on Linux/macOS.
+        [IO.File]::WriteAllText((Join-Path (Resolve-Path $OutDir) 'SHA256SUMS.txt'), (($sums -join "`n") + "`n"))
         Get-ChildItem $OutDir | Format-Table Name, Length
         if (-not $RequireSignature) { Write-Warning 'Release files are NOT code-signed (SignPath not configured).' }
     }
