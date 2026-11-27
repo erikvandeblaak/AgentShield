@@ -28,8 +28,10 @@ from `%LOCALAPPDATA%\AgentShield\bin` (45–64 ms, same SHA-256). `selftest` sti
 `CODE_SIGNING_POLICY.md`; whether signing removes the Norton delay is not yet measured.
 **Update 2026-11-27 (later):** a fresh build was delayed in *every* folder, also under `%LOCALAPPDATA%`
 (`agentshield.exe hook --help` 25.9 s, `--version` 0.85 s), while the installed 0.1.0 started in 59 ms.
-So the folder is not the deciding factor; most likely Norton trusts the binary it has seen before and
-delays new, unknown binaries when started with `hook`. `selftest` now fails above 5 s.
+So it is not simply the folder (the same 0.1.0 file was slow from `dist\` and fast from the install folder,
+and a new build was slow in a new folder under `%LOCALAPPDATA%`). With Norton temporarily disabled the new
+build took 47–60 ms, so Norton causes the delay; why the installed copy is fast is not established.
+`selftest` now fails at 5 s or more.
 
 ## SF-004 — Daemon spawned from the hook inherited Claude Code's stdout pipe (fixed)
 On Windows every inheritable handle is inherited by child processes. When the hook auto-started the

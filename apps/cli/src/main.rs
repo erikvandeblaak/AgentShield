@@ -1860,7 +1860,7 @@ fn selftest(ctx: &Ctx) -> anyhow::Result<i32> {
         "Self test failed".to_string()
     } else if !latency_ok {
         format!(
-            "Hook works but took {ms} ms (limit {SELFTEST_LATENCY_LIMIT_MS} ms). Claude Code waits at most 10 s and then runs the action WITHOUT AgentShield's decision. Antivirus scanning of an unsigned binary is the usual cause: run AgentShield from its install folder or exclude it in your antivirus (docs/SECURITY_FINDINGS.md SF-003)."
+            "Hook works but took {ms} ms (limit {SELFTEST_LATENCY_LIMIT_MS} ms). Claude Code waits at most 10 s and then runs the action WITHOUT AgentShield's decision. Antivirus scanning of an unsigned binary is the usual cause: add an exception for AgentShield in your antivirus or use a signed release (docs/SECURITY_FINDINGS.md SF-003)."
         )
     } else {
         "Hook → engine → audit log path works".to_string()
