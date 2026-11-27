@@ -1,0 +1,8 @@
+# Fictional test credentials in the secret-detector tests (they must look real to test detection).
+# Exact gitleaks fingerprints, so a real secret elsewhere in these files is still reported.
+0e581e6511f2ee6a23326df28abe00c495eae638:crates/secret-detector/src/lib.rs:curl-auth-user:430
+d3178b27968f9711302395bd8d27b9614ddb527a:crates/secret-detector/src/lib.rs:jwt:412
+d3178b27968f9711302395bd8d27b9614ddb527a:crates/secret-detector/src/lib.rs:stripe-access-token:366
+d3178b27968f9711302395bd8d27b9614ddb527a:crates/secret-detector/src/lib.rs:aws-access-token:354
+d3178b27968f9711302395bd8d27b9614ddb527a:crates/secret-detector/src/lib.rs:generic-api-key:447
+d3178b27968f9711302395bd8d27b9614ddb527a:crates/secret-detector/src/lib.rs:gitlab-pat:367
