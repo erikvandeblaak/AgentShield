@@ -41,6 +41,10 @@ De installer voegt AgentShield-hooks toe aan `~/.claude/settings.json` (exec-vor
 alle bestaande hooks en permissies, maakt eerst een backup en verifieert het resultaat.
 `agentshield agent uninstall claude-code` verwijdert alleen de AgentShield-regels.
 
+**Code signing policy:** releases tot en met 0.1.0 zijn niet ondertekend; ondertekening via de SignPath
+Foundation is in behandeling. Zie [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) (Engels: wat er ondertekend
+wordt, rollen, privacybeleid).
+
 ## Ontwikkelen
 
 Open `AgentShield.code-workspace` (of de map) in VS Code: aanbevolen extensies, rust-analyzer voor beide

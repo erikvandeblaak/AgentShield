@@ -21,6 +21,11 @@ fail-open, so this would have **silently disabled monitoring**. Mitigation: hook
 ("run repair"). Norton also adds ~0.5 s to the first launches of a new unsigned binary.
 **Recommendation:** code-sign releases; users of strict AV products can exclude the install directory.
 `agentshield selftest` measures the real hook latency on the user's machine.
+**Update 2026-11-27:** the delay also occurred for `agentshield hook` when the binary ran from
+`dist\` or a temp folder (~26 s, hook timed out, the deny was discarded and the action ran), but not
+from `%LOCALAPPDATA%\AgentShield\bin` (45–64 ms, same SHA-256). `selftest` still reported success at
+26 757 ms (open: fail on latency near the timeout). A signing pipeline (SignPath) is prepared, see
+`CODE_SIGNING_POLICY.md`; whether signing removes the Norton delay is not yet measured.
 
 ## SF-004 — Daemon spawned from the hook inherited Claude Code's stdout pipe (fixed)
 On Windows every inheritable handle is inherited by child processes. When the hook auto-started the

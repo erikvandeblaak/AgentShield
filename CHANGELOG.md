@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Release pipeline for code signing via SignPath (free OSS signing, SignPath Foundation):
+  `.github/workflows/release.yml` + `scripts/release-windows.ps1` sign the binaries first and build the
+  installers from exactly those files (the desktop binary is pre-patched per installer type, because the
+  Tauri bundler would otherwise patch, and so invalidate, a signed binary). Without SignPath configuration
+  the workflow produces unsigned release files. See `CODE_SIGNING_POLICY.md`.
+- `agentshield.exe` now carries Windows version information (product name, version, company), required
+  for signing and matching the desktop app.
+
 ## 0.1.0 — 2026-11-24 (first working vertical slice, unreleased)
 
 - Claude Code adapter: normalization of hook payloads, deny/ask output on PreToolUse (never allow),

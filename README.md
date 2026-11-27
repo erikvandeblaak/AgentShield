@@ -71,6 +71,9 @@ The installer adds AgentShield hooks to `~/.claude/settings.json` (exec form, no
 existing hook and permission, backs the file up first and verifies the result. `agentshield agent
 uninstall claude-code` removes only AgentShield's entries.
 
+**Code signing policy:** releases up to 0.1.0 are unsigned; signing through the SignPath Foundation is
+pending. See [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) (what is signed, roles, privacy policy).
+
 ### Uninstall
 
 - **Windows (NSIS setup.exe, recommended):** the uninstaller stops the daemon, removes exactly the hooks
@@ -116,7 +119,7 @@ configurations — all using an isolated test profile in `target/dev`. See [CLAU
 
 [Security architecture](docs/SECURITY_ARCHITECTURE.md) · [Threat model](docs/THREAT_MODEL.md) ·
 [Policies](docs/POLICIES.md) · [Research](docs/RESEARCH.md) · [Competitors](docs/COMPETITOR_ANALYSIS.md) ·
-[Security findings](docs/SECURITY_FINDINGS.md) · [Progress](docs/PROGRESS.md) · [Technical debt](docs/TECHNICAL_DEBT.md)
+[Security findings](docs/SECURITY_FINDINGS.md) · [Code signing policy](CODE_SIGNING_POLICY.md) · [Progress](docs/PROGRESS.md) · [Technical debt](docs/TECHNICAL_DEBT.md)
 
 ## License
 

@@ -1,0 +1,158 @@
+# Windows release build, code-signed through SignPath (free OSS signing, SignPath Foundation).
+#
+# Flow: build -> sign binaries (SignPath) -> build installers from the signed binaries
+#       -> sign installers (SignPath) -> release files + SHA256SUMS as workflow artifact.
+#
+# Without SignPath configuration (repository variable SIGNPATH_ORGANIZATION_ID empty) the same
+# workflow produces UNSIGNED release files, so the pipeline can be tested before approval.
+# Every release-signing request needs a manual approval in SignPath; the jobs wait for it.
+#
+# Configuration (GitHub → Settings → Secrets and variables → Actions):
+#   secret   SIGNPATH_API_TOKEN          API token of a SignPath user with submitter rights
+#   variable SIGNPATH_ORGANIZATION_ID    SignPath organization id
+#   variable SIGNPATH_PROJECT_SLUG       e.g. AgentShield
+#   variable SIGNPATH_POLICY_SLUG        e.g. release-signing
+# Artifact configurations in SignPath (copies in packaging/signpath/): slugs "binaries", "installers".
+#
+# No caches on purpose: release builds start from a clean runner (no cache poisoning).
+# Actions are pinned to commit SHAs (tag in the comment).
+
+name: Release (Windows)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  SIGNING: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      - name: Version must match the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $conf = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"$').Matches[0].Groups[1].Value
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          if ($conf -ne $tag -or $cargo -ne $tag) { throw "tag $tag, tauri.conf.json $conf, Cargo.toml $cargo" }
+          "VERSION=$tag" >> $env:GITHUB_ENV
+
+      - name: Version (manual run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        run: |
+          $v = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Tests
+        run: cargo test --workspace --locked --no-fail-fast
+
+      - name: Build CLI and desktop app (no installers yet)
+        shell: pwsh
+        run: |
+          ./scripts/stage-sidecar.ps1 -Profile release
+          Push-Location apps/desktop
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npx tauri build --no-bundle
+          if ($LASTEXITCODE -ne 0) { throw 'tauri build failed' }
+          Pop-Location
+          ./scripts/release-windows.ps1 -Step Prepare -OutDir out/unsigned-binaries
+
+      - name: Upload unsigned binaries
+        id: upload-unsigned-binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-binaries
+          path: out/unsigned-binaries/
+          if-no-files-found: error
+
+      - name: Sign binaries (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: binaries
+          github-artifact-id: ${{ steps.upload-unsigned-binaries.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: out/signed-binaries
+          parameters: |
+            version: "${{ env.VERSION }}"
+
+      - name: Use unsigned binaries (SignPath not configured)
+        if: env.SIGNING != 'true'
+        shell: pwsh
+        run: Copy-Item -Recurse out/unsigned-binaries out/signed-binaries
+
+      - name: Build installers from these binaries
+        shell: pwsh
+        run: ./scripts/release-windows.ps1 -Step Bundle -BinariesDir out/signed-binaries -OutDir out/unsigned-installers -RequireSignature:($env:SIGNING -eq 'true')
+
+      - name: Upload unsigned installers
+        id: upload-unsigned-installers
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-installers
+          path: out/unsigned-installers/
+          if-no-files-found: error
+
+      - name: Sign installers (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: installers
+          github-artifact-id: ${{ steps.upload-unsigned-installers.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 7200
+          output-artifact-directory: out/signed-installers
+          parameters: |
+            version: "${{ env.VERSION }}"
+
+      - name: Use unsigned installers (SignPath not configured)
+        if: env.SIGNING != 'true'
+        shell: pwsh
+        run: Copy-Item -Recurse out/unsigned-installers out/signed-installers
+
+      - name: Release files and checksums
+        shell: pwsh
+        run: ./scripts/release-windows.ps1 -Step Finalize -BinariesDir out/signed-binaries -InstallersDir out/signed-installers -OutDir out/release -RequireSignature:($env:SIGNING -eq 'true')
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: agentshield-${{ env.VERSION }}-windows${{ env.SIGNING == 'true' && '-signed' || '-unsigned' }}
+          path: out/release/
+          if-no-files-found: error

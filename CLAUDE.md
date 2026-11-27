@@ -15,7 +15,8 @@ cd apps/desktop/src-tauri && cargo clippy --all-targets -- -D warnings   # deskt
 cd apps/desktop && npm run typecheck && npm run lint && npm test -- --run && npm run build
 cd apps/desktop && npx tauri build --no-bundle        # desktop-app (release, frontend ingebed)
 pwsh scripts/linux-check.ps1                          # Linux: fmt + clippy + tests in WSL Ubuntu 24.04
-pwsh scripts/package-windows.ps1                      # dist\: NSIS + MSI + CLI + SHA256SUMS
+pwsh scripts/package-windows.ps1                      # dist\: NSIS + MSI + CLI + SHA256SUMS (lokaal, unsigned)
+pwsh scripts/release-windows.ps1 -Step Prepare|Bundle|Finalize   # release in stappen rond SignPath-ondertekening (CI: release.yml)
 bash scripts/package-linux.sh                         # dist/: CLI + .deb + AppImage (op Linux)
 ```
 
